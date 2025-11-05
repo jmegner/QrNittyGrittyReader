@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>QR Nitty Gritty Reader</title>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; }
+    h1 { margin-top: 0; }
+    section { margin-bottom: 1.5rem; }
+    video, img { max-width: 100%; height: auto; }
+    pre { white-space: pre-wrap; word-break: break-word; }
+    .hidden { display: none; }
+    button { margin-right: 0.5rem; }
+  </style>
+</head>
+<body>
+  <h1>QR Nitty Gritty Reader</h1>
+  <p>Load a QR code image via file upload, clipboard paste (<kbd>Ctrl/⌘</kbd> + <kbd>V</kbd>), or by taking a snapshot with your camera. The app will decode the QR and expose all the gritty details.</p>
+
+  <section>
+    <h2>1. Upload an image</h2>
+    <input id="file-input" type="file" accept="image/*">
+  </section>
+
+  <section>
+    <h2>2. Paste from clipboard</h2>
+    <button id="paste-button" type="button">Paste image from clipboard</button>
+    <p id="paste-help">You can also press <kbd>Ctrl/⌘</kbd> + <kbd>V</kbd> anywhere on the page.</p>
+  </section>
+
+  <section>
+    <h2>3. Camera capture</h2>
+    <div>
+      <button id="start-camera" type="button">Start camera</button>
+      <button id="capture-frame" type="button" disabled>Capture frame</button>
+      <button id="stop-camera" type="button" disabled>Stop camera</button>
+    </div>
+    <video id="camera" class="hidden" autoplay playsinline></video>
+  </section>
+
+  <section id="preview-section" class="hidden">
+    <h2>Image preview</h2>
+    <img id="preview" alt="Selected QR code preview">
+  </section>
+
+  <section>
+    <h2>Decoded details</h2>
+    <div id="details">Load a QR code to see its structure.</div>
+  </section>
+
+  <canvas id="work-canvas" class="hidden"></canvas>
+
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <script>
+    const fileInput = document.getElementById('file-input');
+    const pasteButton = document.getElementById('paste-button');
+    const startCameraButton = document.getElementById('start-camera');
+    const stopCameraButton = document.getElementById('stop-camera');
+    const captureFrameButton = document.getElementById('capture-frame');
+    const video = document.getElementById('camera');
+    const previewSection = document.getElementById('preview-section');
+    const previewImage = document.getElementById('preview');
+    const detailsContainer = document.getElementById('details');
+    const canvas = document.getElementById('work-canvas');
+    const ctx = canvas.getContext('2d');
+
+    let mediaStream = null;
+    let lastSourceDescription = '';
+
+    fileInput.addEventListener('change', async (event) => {
+      const file = event.target.files && event.target.files[0];
+      if (file) {
+        await handleImageSource(file, `Uploaded file: ${file.name}`);
+        fileInput.value = '';
+      }
+    });
+
+    pasteButton.addEventListener('click', async () => {
+      if (!navigator.clipboard || !navigator.clipboard.read) {
+        alert('Reading clipboard images is not supported in this browser. Try pressing Ctrl/⌘ + V after copying an image.');
+        return;
+      }
+      try {
+        const items = await navigator.clipboard.read();
+        for (const item of items) {
+          const type = item.types.find((t) => t.startsWith('image/'));
+          if (type) {
+            const blob = await item.getType(type);
+            await handleImageSource(blob, 'Clipboard image');
+            return;
+          }
+        }
+        alert('No image found on the clipboard.');
+      } catch (error) {
+        console.error(error);
+        alert('Failed to read clipboard: ' + error.message);
+      }
+    });
+
+    document.addEventListener('paste', async (event) => {
+      const items = event.clipboardData && event.clipboardData.items;
+      if (!items) return;
+      for (const item of items) {
+        if (item.type && item.type.startsWith('image/')) {
+          const blob = item.getAsFile();
+          if (blob) {
+            await handleImageSource(blob, 'Clipboard image');
+            event.preventDefault();
+            return;
+          }
+        }
+      }
+    });
+
+    startCameraButton.addEventListener('click', async () => {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert('Camera access is not supported in this browser.');
+        return;
+      }
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        video.srcObject = mediaStream;
+        video.classList.remove('hidden');
+        captureFrameButton.disabled = false;
+        stopCameraButton.disabled = false;
+        startCameraButton.disabled = true;
+      } catch (error) {
+        console.error(error);
+        alert('Unable to access camera: ' + error.message);
+      }
+    });
+
+    stopCameraButton.addEventListener('click', () => {
+      if (mediaStream) {
+        mediaStream.getTracks().forEach((track) => track.stop());
+        mediaStream = null;
+      }
+      video.srcObject = null;
+      video.classList.add('hidden');
+      captureFrameButton.disabled = true;
+      stopCameraButton.disabled = true;
+      startCameraButton.disabled = false;
+    });
+
+    captureFrameButton.addEventListener('click', async () => {
+      if (!video.videoWidth || !video.videoHeight) {
+        alert('Camera not ready yet.');
+        return;
+      }
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      if (blob) {
+        await handleImageSource(blob, 'Camera capture');
+      }
+    });
+
+    async function handleImageSource(blobOrFile, description) {
+      lastSourceDescription = description;
+      const bitmap = await createImageBitmap(blobOrFile);
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      ctx.drawImage(bitmap, 0, 0);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const result = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'attemptBoth' });
+
+      const imageURL = URL.createObjectURL(blobOrFile);
+      previewImage.src = imageURL;
+      previewImage.onload = () => URL.revokeObjectURL(imageURL);
+      previewSection.classList.remove('hidden');
+
+      if (!result) {
+        detailsContainer.innerHTML = `<p>No QR code detected in the supplied image.</p>`;
+        return;
+      }
+
+      const analysis = analyzeQRResult(result);
+      renderAnalysis(analysis);
+    }
+
+    function analyzeQRResult(result) {
+      const version = result.version || null;
+      const dimension = typeof version === 'number' ? (17 + 4 * version) : null;
+      const maskPattern = typeof result.maskPattern === 'number' ? result.maskPattern : null;
+      const ecLevel = result.errorCorrectionLevel || null;
+      const binaryData = result.binaryData ? Array.from(result.binaryData) : [];
+      const parsed = parseDataStream(binaryData, version);
+      return {
+        source: lastSourceDescription,
+        version,
+        dimension,
+        maskPattern,
+        ecLevel,
+        dataString: result.data,
+        binaryData,
+        segments: parsed.segments,
+        terminatorBits: parsed.terminatorBits,
+        padZeroBits: parsed.padZeroBits,
+        padBytes: parsed.padBytes,
+        totalDataBits: binaryData.length * 8,
+        consumedBits: parsed.consumedBits
+      };
+    }
+
+    function renderAnalysis(info) {
+      const fragments = [];
+      fragments.push(`<p><strong>Source:</strong> ${escapeHtml(info.source || 'Unknown')}</p>`);
+      if (info.version !== null) {
+        fragments.push(`<p><strong>Version:</strong> ${info.version} (dimension ${info.dimension}×${info.dimension} modules)</p>`);
+      } else {
+        fragments.push('<p><strong>Version:</strong> Unknown</p>');
+      }
+      if (info.maskPattern !== null) {
+        fragments.push(`<p><strong>Mask pattern:</strong> ${info.maskPattern}</p>`);
+      }
+      if (info.ecLevel) {
+        fragments.push(`<p><strong>Error correction level:</strong> ${info.ecLevel}</p>`);
+      }
+      fragments.push(`<p><strong>Decoded data:</strong> ${escapeHtml(info.dataString || '')}</p>`);
+      fragments.push(`<p><strong>Data codewords:</strong> ${info.binaryData.length} (${info.totalDataBits} bits)</p>`);
+
+      const segmentsList = info.segments.map((segment, index) => {
+        const header = `<strong>${index + 1}. ${escapeHtml(segment.label)}</strong>`;
+        const summary = [];
+        if (segment.modeName) summary.push(`mode: ${escapeHtml(segment.modeName)}`);
+        if (typeof segment.length === 'number') summary.push(`length: ${segment.length}`);
+        const bitParts = [`mode 4`];
+        if (segment.countBits) {
+          bitParts.push(`count ${segment.countBits}`);
+        }
+        if (typeof segment.dataBits === 'number') {
+          bitParts.push(`data ${segment.dataBits}`);
+        }
+        summary.push(`bits: ${segment.totalBits}${bitParts.length ? ` (${bitParts.join(' + ')})` : ''}`);
+        if (segment.details) summary.push(segment.details);
+        return `<li>${header}<br>${summary.join('<br>')}</li>`;
+      }).join('');
+      fragments.push(`<h3>Data segments</h3><ol>${segmentsList || '<li>No segments decoded.</li>'}</ol>`);
+
+      const paddingLines = [];
+      paddingLines.push(`Consumed data bits: ${info.consumedBits}`);
+      paddingLines.push(`Terminator bits: ${info.terminatorBits}`);
+      paddingLines.push(`Zero padding bits before pad bytes: ${info.padZeroBits}`);
+      paddingLines.push(`Pad bytes (${info.padBytes.length}): ${info.padBytes.map((b) => '0x' + b.toString(16).padStart(2, '0')).join(', ') || 'none'}`);
+      fragments.push(`<h3>Padding</h3><p>${paddingLines.join('<br>')}</p>`);
+
+      detailsContainer.innerHTML = fragments.join('\n');
+    }
+
+    const ALPHANUMERIC_TABLE = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:';
+
+    function parseDataStream(bytes, version) {
+      const bits = bytes.map((byte) => byte.toString(2).padStart(8, '0')).join('');
+      let index = 0;
+      const segments = [];
+      let terminatorBits = 0;
+      let padZeroBits = 0;
+      let currentECIEncoding = 'iso-8859-1';
+      const totalBits = bits.length;
+
+      while (index + 4 <= totalBits) {
+        const modeValue = parseInt(bits.slice(index, index + 4), 2);
+        index += 4;
+        if (modeValue === 0) {
+          terminatorBits = 4;
+          segments.push({
+            label: 'Terminator',
+            modeName: 'Terminator',
+            totalBits: 4,
+            countBits: 0
+          });
+          break;
+        }
+
+        if (modeValue === 5 || modeValue === 9) {
+          const label = modeValue === 5 ? 'FNC1 (first position)' : 'FNC1 (second position)';
+          segments.push({
+            label,
+            modeName: 'FNC1 control',
+            totalBits: 4,
+            countBits: 0,
+            details: 'Marks subsequent data as GS1 / AIM structured'
+          });
+          continue;
+        }
+
+        if (modeValue === 3) {
+          if (index + 16 > totalBits) break;
+          const sequence = parseInt(bits.slice(index, index + 4), 2);
+          const total = parseInt(bits.slice(index + 4, index + 8), 2);
+          const parity = parseInt(bits.slice(index + 8, index + 16), 2);
+          index += 16;
+          segments.push({
+            label: 'Structured append header',
+            modeName: 'Structured append',
+            totalBits: 20,
+            countBits: 16,
+            details: `Position ${sequence + 1} of ${total + 1}, parity 0x${parity.toString(16).padStart(2, '0')}`
+          });
+          continue;
+        }
+
+        if (modeValue === 7) {
+          const eci = readECI(bits, index);
+          if (!eci) break;
+          index = eci.nextIndex;
+          currentECIEncoding = eci.encoding || currentECIEncoding;
+          segments.push({
+            label: 'ECI designator',
+            modeName: 'ECI',
+            totalBits: 4 + eci.bits,
+            countBits: eci.bits,
+            details: `Assignment value ${eci.value}` + (eci.encoding ? ` (encoding ${eci.encoding})` : '')
+          });
+          continue;
+        }
+
+        if (modeValue === 6 || modeValue === 8 || modeValue > 9) {
+          segments.push({
+            label: `Mode ${modeValue}`,
+            modeName: 'Unsupported/unknown',
+            totalBits: 4,
+            countBits: 0,
+            details: 'This implementation does not parse this segment type.'
+          });
+          break;
+        }
+
+        if (!version) {
+          segments.push({
+            label: 'Unknown segment',
+            modeName: 'Version required',
+            totalBits: 4,
+            countBits: 0,
+            details: 'Cannot parse segment without QR version information.'
+          });
+          break;
+        }
+
+        const modeInfo = getModeInfo(modeValue);
+        const countBits = getCharacterCountBits(modeInfo.key, version);
+        if (index + countBits > totalBits) break;
+        const charCount = parseInt(bits.slice(index, index + countBits), 2);
+        index += countBits;
+
+        if (modeInfo.key === 'numeric') {
+          const numeric = readNumeric(bits, index, charCount);
+          index = numeric.nextIndex;
+          segments.push({
+            label: `Numeric data (${charCount} digits)`,
+            modeName: 'Numeric',
+            length: charCount,
+            totalBits: 4 + countBits + numeric.bits,
+            countBits,
+            dataBits: numeric.bits,
+            details: `Digits: ${escapeHtml(numeric.text)}`
+          });
+          continue;
+        }
+
+        if (modeInfo.key === 'alphanumeric') {
+          const alpha = readAlphanumeric(bits, index, charCount);
+          index = alpha.nextIndex;
+          segments.push({
+            label: `Alphanumeric data (${charCount} chars)`,
+            modeName: 'Alphanumeric',
+            length: charCount,
+            totalBits: 4 + countBits + alpha.bits,
+            countBits,
+            dataBits: alpha.bits,
+            details: `Text: ${escapeHtml(alpha.text)}`
+          });
+          continue;
+        }
+
+        if (modeInfo.key === 'byte') {
+          const byteData = readBytes(bits, index, charCount, currentECIEncoding);
+          index = byteData.nextIndex;
+          segments.push({
+            label: `Byte data (${charCount} bytes)`,
+            modeName: `Byte (${byteData.encodingLabel})`,
+            length: charCount,
+            totalBits: 4 + countBits + byteData.bits,
+            countBits,
+            dataBits: byteData.bits,
+            details: `Text: ${escapeHtml(byteData.text)}<br>Bytes: ${byteData.hex.join(' ')}`
+          });
+          continue;
+        }
+
+        if (modeInfo.key === 'kanji') {
+          const kanji = readKanji(bits, index, charCount);
+          index = kanji.nextIndex;
+          segments.push({
+            label: `Kanji data (${charCount} chars)`,
+            modeName: 'Kanji',
+            length: charCount,
+            totalBits: 4 + countBits + kanji.bits,
+            countBits,
+            dataBits: kanji.bits,
+            details: `Shift JIS: ${kanji.hex.join(' ')}${kanji.text ? `<br>Text: ${escapeHtml(kanji.text)}` : ''}`
+          });
+          continue;
+        }
+
+        segments.push({
+          label: 'Unknown segment',
+          modeName: 'Unparsed',
+          totalBits: 4 + countBits,
+          countBits,
+          details: 'Segment type is not implemented.'
+        });
+        break;
+      }
+
+      const consumedBits = index;
+      if (consumedBits < totalBits) {
+        const remainder = totalBits - consumedBits;
+        const remainderToByteBoundary = (8 - (consumedBits % 8)) % 8;
+        padZeroBits = remainderToByteBoundary;
+        const usedBytes = Math.ceil(consumedBits / 8);
+        const padBytes = bytes.slice(usedBytes);
+        return {
+          segments,
+          terminatorBits,
+          padZeroBits,
+          padBytes,
+          consumedBits
+        };
+      }
+
+      return {
+        segments,
+        terminatorBits,
+        padZeroBits: 0,
+        padBytes: [],
+        consumedBits
+      };
+    }
+
+    function getModeInfo(modeValue) {
+      switch (modeValue) {
+        case 1: return { key: 'numeric' };
+        case 2: return { key: 'alphanumeric' };
+        case 4: return { key: 'byte' };
+        case 8: return { key: 'kanji' };
+        default: return { key: 'unknown' };
+      }
+    }
+
+    function getCharacterCountBits(modeKey, version) {
+      const group = version <= 9 ? 0 : version <= 26 ? 1 : 2;
+      const table = {
+        numeric: [10, 12, 14],
+        alphanumeric: [9, 11, 13],
+        byte: [8, 16, 16],
+        kanji: [8, 10, 12]
+      };
+      const values = table[modeKey];
+      return values ? values[group] : 0;
+    }
+
+    function readNumeric(bits, index, count) {
+      let text = '';
+      let bitsUsed = 0;
+      for (let i = 0; i < count; i += 3) {
+        const remaining = count - i;
+        const chunkSize = remaining >= 3 ? 10 : remaining === 2 ? 7 : 4;
+        const chunk = bits.slice(index, index + chunkSize);
+        index += chunkSize;
+        bitsUsed += chunkSize;
+        const value = parseInt(chunk, 2);
+        if (remaining >= 3) {
+          text += value.toString().padStart(3, '0');
+        } else if (remaining === 2) {
+          text += value.toString().padStart(2, '0');
+        } else {
+          text += value.toString();
+        }
+      }
+      return { text, bits: bitsUsed, nextIndex: index };
+    }
+
+    function readAlphanumeric(bits, index, count) {
+      let text = '';
+      let bitsUsed = 0;
+      for (let i = 0; i < count; i += 2) {
+        if (count - i >= 2) {
+          const chunk = bits.slice(index, index + 11);
+          index += 11;
+          bitsUsed += 11;
+          const value = parseInt(chunk, 2);
+          const first = Math.floor(value / 45);
+          const second = value % 45;
+          text += ALPHANUMERIC_TABLE[first] + ALPHANUMERIC_TABLE[second];
+        } else {
+          const chunk = bits.slice(index, index + 6);
+          index += 6;
+          bitsUsed += 6;
+          const value = parseInt(chunk, 2);
+          text += ALPHANUMERIC_TABLE[value];
+        }
+      }
+      return { text, bits: bitsUsed, nextIndex: index };
+    }
+
+    function readBytes(bits, index, count, encoding) {
+      const bytes = [];
+      let bitsUsed = 0;
+      for (let i = 0; i < count; i++) {
+        const chunk = bits.slice(index, index + 8);
+        index += 8;
+        bitsUsed += 8;
+        bytes.push(parseInt(chunk, 2));
+      }
+      const uint8 = new Uint8Array(bytes);
+      let text = '';
+      let encodingLabel = encoding || 'iso-8859-1';
+      try {
+        if (typeof TextDecoder !== 'undefined') {
+          const decoder = new TextDecoder(encodingLabel, { fatal: false });
+          text = decoder.decode(uint8);
+        } else {
+          throw new Error('TextDecoder not available');
+        }
+      } catch (error) {
+        const fallback = bytes.map((byte) => (byte >= 32 && byte <= 126 ? String.fromCharCode(byte) : '.')).join('');
+        text = fallback;
+        encodingLabel = encoding ? `${encoding} (unsupported)` : 'binary';
+      }
+      const hex = bytes.map((byte) => byte.toString(16).padStart(2, '0'));
+      return { text, bytes, hex, bits: bitsUsed, nextIndex: index, encodingLabel };
+    }
+
+    function readKanji(bits, index, count) {
+      const values = [];
+      let bitsUsed = 0;
+      for (let i = 0; i < count; i++) {
+        const chunk = bits.slice(index, index + 13);
+        index += 13;
+        bitsUsed += 13;
+        const encoded = parseInt(chunk, 2);
+        const msb = Math.floor(encoded / 0xC0);
+        const lsb = encoded % 0xC0;
+        let sjis = (msb << 8) | lsb;
+        if (sjis + 0x8140 <= 0x9FFC) {
+          sjis += 0x8140;
+        } else {
+          sjis += 0xC140;
+        }
+        values.push(sjis);
+      }
+      const bytes = [];
+      values.forEach((value) => {
+        bytes.push((value >> 8) & 0xff, value & 0xff);
+      });
+      let text = '';
+      try {
+        if (typeof TextDecoder !== 'undefined') {
+          const decoder = new TextDecoder('shift_jis', { fatal: false });
+          text = decoder.decode(new Uint8Array(bytes));
+        } else {
+          throw new Error('TextDecoder not available');
+        }
+      } catch (error) {
+        text = '';
+      }
+      const hex = [];
+      for (let i = 0; i < bytes.length; i += 2) {
+        hex.push(bytes[i].toString(16).padStart(2, '0') + bytes[i + 1].toString(16).padStart(2, '0'));
+      }
+      return { text, bits: bitsUsed, nextIndex: index, hex };
+    }
+
+    function readECI(bits, index) {
+      if (index + 8 > bits.length) return null;
+      const first = parseInt(bits.slice(index, index + 8), 2);
+      index += 8;
+      let value;
+      let bitsUsed = 8;
+      if ((first & 0x80) === 0) {
+        value = first & 0x7f;
+      } else if ((first & 0xc0) === 0x80) {
+        if (index + 8 > bits.length) return null;
+        const second = parseInt(bits.slice(index, index + 8), 2);
+        index += 8;
+        bitsUsed += 8;
+        value = ((first & 0x3f) << 8) | second;
+      } else if ((first & 0xe0) === 0xc0) {
+        if (index + 16 > bits.length) return null;
+        const second = parseInt(bits.slice(index, index + 8), 2);
+        const third = parseInt(bits.slice(index + 8, index + 16), 2);
+        index += 16;
+        bitsUsed += 16;
+        value = ((first & 0x1f) << 16) | (second << 8) | third;
+      } else {
+        return null;
+      }
+      return { value, encoding: eciToEncoding(value), nextIndex: index, bits: bitsUsed };
+    }
+
+    function eciToEncoding(value) {
+      const map = {
+        1: 'cp437',
+        2: 'shift_jis',
+        3: 'iso-8859-1',
+        4: 'iso-8859-2',
+        5: 'iso-8859-3',
+        6: 'iso-8859-4',
+        7: 'iso-8859-5',
+        8: 'iso-8859-6',
+        9: 'iso-8859-7',
+        10: 'iso-8859-8',
+        11: 'iso-8859-9',
+        12: 'iso-8859-10',
+        13: 'iso-8859-11',
+        15: 'iso-8859-13',
+        16: 'iso-8859-14',
+        17: 'iso-8859-15',
+        18: 'iso-8859-16',
+        20: 'shift_jis',
+        21: 'windows-1250',
+        22: 'windows-1251',
+        23: 'windows-1252',
+        24: 'windows-1256',
+        25: 'utf-16be',
+        26: 'utf-8'
+      };
+      return map[value] || null;
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+  </script>
+</body>
+</html>
