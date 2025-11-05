@@ -186,6 +186,7 @@
       const ecLevel = result.errorCorrectionLevel || null;
       const binaryData = result.binaryData ? Array.from(result.binaryData) : [];
       const parsed = parseDataStream(binaryData, version);
+      const jsqrSnapshot = buildJSQRSnapshot(result);
       return {
         source: lastSourceDescription,
         version,
@@ -199,7 +200,8 @@
         padZeroBits: parsed.padZeroBits,
         padBytes: parsed.padBytes,
         totalDataBits: binaryData.length * 8,
-        consumedBits: parsed.consumedBits
+        consumedBits: parsed.consumedBits,
+        jsqrSummary: jsqrSnapshot
       };
     }
 
@@ -237,6 +239,11 @@
         return `<li>${header}<br>${summary.join('<br>')}</li>`;
       }).join('');
       fragments.push(`<h3>Data segments</h3><ol>${segmentsList || '<li>No segments decoded.</li>'}</ol>`);
+
+      if (info.jsqrSummary) {
+        fragments.push('<h3>jsQR reported details</h3>');
+        fragments.push(`<pre>${escapeHtml(info.jsqrSummary)}</pre>`);
+      }
 
       const paddingLines = [];
       paddingLines.push(`Consumed data bits: ${info.consumedBits}`);
@@ -628,6 +635,39 @@
         26: 'utf-8'
       };
       return map[value] || null;
+    }
+
+    function buildJSQRSnapshot(result) {
+      if (!result || typeof result !== 'object') {
+        return '';
+      }
+      try {
+        const snapshot = cloneForDisplay(result, new WeakSet());
+        return JSON.stringify(snapshot, null, 2);
+      } catch (error) {
+        return `Unable to serialize jsQR result: ${error.message}`;
+      }
+    }
+
+    function cloneForDisplay(value, seen) {
+      if (value === null || typeof value !== 'object') {
+        return value;
+      }
+      if (ArrayBuffer.isView(value) && !(value instanceof DataView)) {
+        return Array.from(value);
+      }
+      if (seen.has(value)) {
+        return '[Circular]';
+      }
+      seen.add(value);
+      if (Array.isArray(value)) {
+        return value.map((item) => cloneForDisplay(item, seen));
+      }
+      const result = {};
+      Object.keys(value).forEach((key) => {
+        result[key] = cloneForDisplay(value[key], seen);
+      });
+      return result;
     }
 
     function escapeHtml(value) {
