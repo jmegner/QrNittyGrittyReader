@@ -227,7 +227,14 @@
         const summary = [];
         if (segment.modeName) summary.push(`mode: ${escapeHtml(segment.modeName)}`);
         if (typeof segment.length === 'number') summary.push(`length: ${segment.length}`);
-        const bitParts = [`mode 4`];
+        if (typeof segment.modeIndicator === 'number') {
+          const indicatorBits = segment.modeIndicator.toString(2).padStart(4, '0');
+          summary.push(`mode indicator bits: ${indicatorBits} (value ${segment.modeIndicator})`);
+        }
+        const bitParts = [];
+        if (segment.modeBits) {
+          bitParts.push(`mode ${segment.modeBits}`);
+        }
         if (segment.countBits) {
           bitParts.push(`count ${segment.countBits}`);
         }
@@ -240,17 +247,17 @@
       }).join('');
       fragments.push(`<h3>Data segments</h3><ol>${segmentsList || '<li>No segments decoded.</li>'}</ol>`);
 
-      if (info.jsqrSummary) {
-        fragments.push('<h3>jsQR reported details</h3>');
-        fragments.push(`<pre>${escapeHtml(info.jsqrSummary)}</pre>`);
-      }
-
       const paddingLines = [];
       paddingLines.push(`Consumed data bits: ${info.consumedBits}`);
       paddingLines.push(`Terminator bits: ${info.terminatorBits}`);
       paddingLines.push(`Zero padding bits before pad bytes: ${info.padZeroBits}`);
       paddingLines.push(`Pad bytes (${info.padBytes.length}): ${info.padBytes.map((b) => '0x' + b.toString(16).padStart(2, '0')).join(', ') || 'none'}`);
       fragments.push(`<h3>Padding</h3><p>${paddingLines.join('<br>')}</p>`);
+
+      if (info.jsqrSummary) {
+        fragments.push('<h3>jsQR reported details</h3>');
+        fragments.push(`<pre>${escapeHtml(info.jsqrSummary)}</pre>`);
+      }
 
       detailsContainer.innerHTML = fragments.join('\n');
     }
@@ -269,13 +276,15 @@
       while (index + 4 <= totalBits) {
         const modeValue = parseInt(bits.slice(index, index + 4), 2);
         index += 4;
+        const segmentBase = { modeIndicator: modeValue, modeBits: 4 };
         if (modeValue === 0) {
           terminatorBits = 4;
           segments.push({
             label: 'Terminator',
             modeName: 'Terminator',
             totalBits: 4,
-            countBits: 0
+            countBits: 0,
+            ...segmentBase
           });
           break;
         }
@@ -287,7 +296,8 @@
             modeName: 'FNC1 control',
             totalBits: 4,
             countBits: 0,
-            details: 'Marks subsequent data as GS1 / AIM structured'
+            details: 'Marks subsequent data as GS1 / AIM structured',
+            ...segmentBase
           });
           continue;
         }
@@ -303,7 +313,8 @@
             modeName: 'Structured append',
             totalBits: 20,
             countBits: 16,
-            details: `Position ${sequence + 1} of ${total + 1}, parity 0x${parity.toString(16).padStart(2, '0')}`
+            details: `Position ${sequence + 1} of ${total + 1}, parity 0x${parity.toString(16).padStart(2, '0')}`,
+            ...segmentBase
           });
           continue;
         }
@@ -318,20 +329,10 @@
             modeName: 'ECI',
             totalBits: 4 + eci.bits,
             countBits: eci.bits,
-            details: `Assignment value ${eci.value}` + (eci.encoding ? ` (encoding ${eci.encoding})` : '')
+            details: `Assignment value ${eci.value}` + (eci.encoding ? ` (encoding ${eci.encoding})` : ''),
+            ...segmentBase
           });
           continue;
-        }
-
-        if (modeValue === 6 || modeValue === 8 || modeValue > 9) {
-          segments.push({
-            label: `Mode ${modeValue}`,
-            modeName: 'Unsupported/unknown',
-            totalBits: 4,
-            countBits: 0,
-            details: 'This implementation does not parse this segment type.'
-          });
-          break;
         }
 
         if (!version) {
@@ -340,12 +341,24 @@
             modeName: 'Version required',
             totalBits: 4,
             countBits: 0,
-            details: 'Cannot parse segment without QR version information.'
+            details: 'Cannot parse segment without QR version information.',
+            ...segmentBase
           });
           break;
         }
 
         const modeInfo = getModeInfo(modeValue);
+        if (modeInfo.key === 'unknown') {
+          segments.push({
+            label: `Mode ${modeValue}`,
+            modeName: 'Unsupported/unknown',
+            totalBits: 4,
+            countBits: 0,
+            details: 'This implementation does not parse this segment type.',
+            ...segmentBase
+          });
+          break;
+        }
         const countBits = getCharacterCountBits(modeInfo.key, version);
         if (index + countBits > totalBits) break;
         const charCount = parseInt(bits.slice(index, index + countBits), 2);
@@ -361,7 +374,8 @@
             totalBits: 4 + countBits + numeric.bits,
             countBits,
             dataBits: numeric.bits,
-            details: `Digits: ${escapeHtml(numeric.text)}`
+            details: `Digits: ${escapeHtml(numeric.text)}`,
+            ...segmentBase
           });
           continue;
         }
@@ -376,7 +390,8 @@
             totalBits: 4 + countBits + alpha.bits,
             countBits,
             dataBits: alpha.bits,
-            details: `Text: ${escapeHtml(alpha.text)}`
+            details: `Text: ${escapeHtml(alpha.text)}`,
+            ...segmentBase
           });
           continue;
         }
@@ -391,7 +406,8 @@
             totalBits: 4 + countBits + byteData.bits,
             countBits,
             dataBits: byteData.bits,
-            details: `Text: ${escapeHtml(byteData.text)}<br>Bytes: ${byteData.hex.join(' ')}`
+            details: `Text: ${escapeHtml(byteData.text)}<br>Bytes: ${byteData.hex.join(' ')}`,
+            ...segmentBase
           });
           continue;
         }
@@ -406,7 +422,8 @@
             totalBits: 4 + countBits + kanji.bits,
             countBits,
             dataBits: kanji.bits,
-            details: `Shift JIS: ${kanji.hex.join(' ')}${kanji.text ? `<br>Text: ${escapeHtml(kanji.text)}` : ''}`
+            details: `Shift JIS: ${kanji.hex.join(' ')}${kanji.text ? `<br>Text: ${escapeHtml(kanji.text)}` : ''}`,
+            ...segmentBase
           });
           continue;
         }
@@ -416,7 +433,8 @@
           modeName: 'Unparsed',
           totalBits: 4 + countBits,
           countBits,
-          details: 'Segment type is not implemented.'
+          details: 'Segment type is not implemented.',
+          ...segmentBase
         });
         break;
       }
