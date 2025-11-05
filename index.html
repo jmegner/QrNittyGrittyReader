@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QR Nitty Gritty Reader</title>
+</head>
+<body>
+  <h1>QR Nitty Gritty Reader</h1>
+  <p>Select a QR code image by uploading a file, pasting from the clipboard, or using your camera. The app will decode the QR code and list all of its low-level details.</p>
+
+  <section>
+    <h2>1. Provide an image</h2>
+    <div>
+      <label for="fileInput">Upload image:</label>
+      <input type="file" id="fileInput" accept="image/*" />
+    </div>
+    <div>
+      <button id="pasteButton" type="button">Paste image from clipboard</button>
+      <span id="pasteStatus"></span>
+    </div>
+    <div>
+      <button id="cameraToggle" type="button">Start camera</button>
+      <button id="captureFrame" type="button" disabled>Capture frame</button>
+    </div>
+    <div>
+      <video id="cameraPreview" autoplay playsinline style="max-width: 320px; width: 100%; display: none;"></video>
+    </div>
+  </section>
+
+  <section>
+    <h2>2. Results</h2>
+    <div id="status">Waiting for an image...</div>
+    <pre id="details"></pre>
+  </section>
+
+  <canvas id="workCanvas" style="display:none;"></canvas>
+
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
