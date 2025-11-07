@@ -2,8 +2,6 @@
   const fileInput = document.getElementById('image-input');
   const dropArea = document.getElementById('drop-area');
   const preview = document.getElementById('preview');
-  const clipboardButton = document.getElementById('clipboard-button');
-  const clipboardStatus = document.getElementById('clipboard-status');
   const startCameraButton = document.getElementById('start-camera');
   const capturePhotoButton = document.getElementById('capture-photo');
   const stopCameraButton = document.getElementById('stop-camera');
@@ -38,26 +36,6 @@
       preview.textContent = 'Unable to read the selected image file.';
     });
     reader.readAsDataURL(file);
-  }
-
-  function handleBlob(blob, description) {
-    if (!blob) {
-      return;
-    }
-
-    if (!blob.type.startsWith('image/')) {
-      preview.textContent = 'Clipboard data is not an image.';
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.addEventListener('load', () => {
-      setPreviewFromDataUrl(reader.result, description);
-    });
-    reader.addEventListener('error', () => {
-      preview.textContent = 'Unable to load the image from clipboard.';
-    });
-    reader.readAsDataURL(blob);
   }
 
   function preventDefaults(event) {
@@ -143,53 +121,6 @@
     });
   }
 
-  async function requestClipboardRead() {
-    if (!navigator.clipboard || !navigator.permissions) {
-      clipboardStatus.textContent = 'Clipboard read API is not supported by this browser.';
-      return;
-    }
-
-    clipboardStatus.textContent = 'Requesting access to the clipboard…';
-
-    try {
-      const permissionStatus = await navigator.permissions.query({ name: 'clipboard-read' });
-      if (permissionStatus.state === 'denied') {
-        clipboardStatus.textContent = 'Clipboard read permission denied. Focus the drop zone and press Ctrl+V (or Command+V on macOS).';
-        return;
-      }
-    } catch (error) {
-      clipboardStatus.textContent = 'Unable to query clipboard permissions. Try pasting directly into the drop area.';
-      return;
-    }
-
-    try {
-      const clipboardItems = await navigator.clipboard.read();
-      for (const clipboardItem of clipboardItems) {
-        for (const type of clipboardItem.types) {
-          if (type.startsWith('image/')) {
-            const blob = await clipboardItem.getType(type);
-            handleBlob(blob, 'Clipboard image');
-            clipboardStatus.textContent = 'Image loaded from clipboard.';
-            return;
-          }
-        }
-      }
-      clipboardStatus.textContent = 'No image found in the clipboard. Copy an image first and try again.';
-    } catch (error) {
-      clipboardStatus.textContent = 'Clipboard access was blocked. Focus the drop zone and use Ctrl+V (or Command+V on macOS).';
-    }
-  }
-
-  function setupClipboardButton() {
-    if (!clipboardButton) {
-      return;
-    }
-
-    clipboardButton.addEventListener('click', () => {
-      requestClipboardRead();
-    });
-  }
-
   function stopCamera() {
     if (mediaStream) {
       mediaStream.getTracks().forEach((track) => track.stop());
@@ -247,7 +178,6 @@
   function init() {
     setupFileInput();
     setupDragAndDrop();
-    setupClipboardButton();
     setupCameraControls();
   }
 
