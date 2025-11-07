@@ -43,7 +43,9 @@
 
     const reader = new FileReader();
     reader.addEventListener('load', () => {
-      setPreviewFromDataUrl(reader.result, file.name, originLabel);
+      const resolvedOriginLabel =
+        originLabel === 'File' && file.name ? `File '${file.name}'` : originLabel;
+      setPreviewFromDataUrl(reader.result, file.name, resolvedOriginLabel);
     });
     reader.addEventListener('error', () => {
       preview.textContent = 'Unable to read the selected image file.';
