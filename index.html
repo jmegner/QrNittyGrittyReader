@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Image Input Demo</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+      max-width: 800px;
+    }
+
+    section {
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 1rem;
+    }
+
+    #drop-area {
+      border: 2px dashed #999;
+      border-radius: 8px;
+      padding: 2rem;
+      text-align: center;
+      color: #666;
+      transition: background-color 0.2s ease-in-out;
+    }
+
+    #drop-area.dragover {
+      background-color: #f0f8ff;
+    }
+
+    #preview figure {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    #preview img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .preview-source {
+      font-size: 0.875rem;
+      color: #555;
+    }
+
+    #image-input {
+      font-size: 1rem;
+    }
+
+    #image-input::file-selector-button,
+    #image-input::-webkit-file-upload-button {
+      padding: 1.5rem 3rem;
+      font-size: 1.125rem;
+    }
+
+    #camera-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    #camera-output {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    #camera-output video,
+    #camera-output canvas {
+      max-width: 100%;
+      border-radius: 8px;
+      background: #000;
+    }
+
+  </style>
+</head>
+<body>
+  <h1>Image Input Demo</h1>
+
+  <section>
+    <h2>Upload an Image File</h2>
+    <input id="image-input" type="file" accept="image/*">
+  </section>
+
+  <section>
+    <h2>Paste or Drop an Image</h2>
+    <div id="drop-area" tabindex="0" aria-label="Drop or paste an image here">
+      Click here and press Ctrl+V to paste an image.
+    </div>
+  </section>
+
+  <section id="camera-section">
+    <h2>Capture from Camera</h2>
+    <div id="camera-controls">
+      <button id="start-camera" type="button">Start Camera</button>
+      <button id="capture-photo" type="button" disabled>Capture Photo</button>
+      <button id="stop-camera" type="button" disabled>Stop Camera</button>
+    </div>
+    <div id="camera-output">
+      <video id="camera-stream" autoplay playsinline hidden></video>
+      <canvas id="camera-canvas" width="640" height="480" hidden></canvas>
+    </div>
+  </section>
+
+  <section>
+    <h2>Preview</h2>
+    <div id="preview">No image selected.</div>
+  </section>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
