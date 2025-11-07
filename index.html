@@ -81,6 +81,16 @@
       background: #000;
     }
 
+    #qr-output {
+      max-width: 100%;
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #f7f7f7;
+      border-radius: 8px;
+      padding: 0.75rem;
+      overflow: auto;
+    }
+
   </style>
 </head>
 <body>
@@ -116,6 +126,12 @@
     <div id="preview">No image selected.</div>
   </section>
 
+  <section>
+    <h2>QR Decode Result</h2>
+    <pre id="qr-output">No QR decoded yet.</pre>
+  </section>
+
+  <script src="jsQRNittyGritty.js"></script>
   <script src="app.js" defer></script>
 </body>
 </html>

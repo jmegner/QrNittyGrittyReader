@@ -7,6 +7,7 @@
   const stopCameraButton = document.getElementById('stop-camera');
   const cameraStreamEl = document.getElementById('camera-stream');
   const cameraCanvas = document.getElementById('camera-canvas');
+  const qrOutput = document.getElementById('qr-output');
 
   let mediaStream = null;
 
@@ -29,6 +30,9 @@
     figure.appendChild(image);
 
     preview.appendChild(figure);
+
+    // Kick off QR decode for this image
+    decodeFromDataUrl(dataUrl);
   }
 
   function handleFile(file, originLabel) {
@@ -51,6 +55,61 @@
       preview.textContent = 'Unable to read the selected image file.';
     });
     reader.readAsDataURL(file);
+  }
+
+  function renderQrResult(result) {
+    if (!qrOutput) return;
+    if (!result) {
+      qrOutput.textContent = 'No QR code found in image.';
+      return;
+    }
+    try {
+      qrOutput.textContent = JSON.stringify(result, null, 2);
+    } catch {
+      qrOutput.textContent = 'Unable to stringify result.';
+    }
+  }
+
+  function decodeFromCanvas(canvas) {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      renderQrResult(null);
+      return;
+    }
+    const width = canvas.width;
+    const height = canvas.height;
+    let imageData;
+    try {
+      imageData = ctx.getImageData(0, 0, width, height);
+    } catch {
+      renderQrResult(null);
+      return;
+    }
+    if (!window.jsQR) {
+      renderQrResult({ error: 'jsQRNittyGritty not loaded' });
+      return;
+    }
+    const result = window.jsQR(imageData.data, width, height, { inversionAttempts: 'attemptBoth' });
+    renderQrResult(result);
+  }
+
+  function decodeFromDataUrl(dataUrl) {
+    const img = new Image();
+    // To avoid taint issues when reading pixels from data URL, no crossOrigin needed
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth || img.width;
+      canvas.height = img.naturalHeight || img.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        renderQrResult(null);
+        return;
+      }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      decodeFromCanvas(canvas);
+    };
+    img.onerror = () => renderQrResult(null);
+    img.src = dataUrl;
   }
 
   function preventDefaults(event) {
@@ -201,6 +260,9 @@
 
     const dataUrl = cameraCanvas.toDataURL('image/png');
     setPreviewFromDataUrl(dataUrl, 'Captured image', 'Camera');
+
+    // Use the drawn camera frame directly for decoding
+    decodeFromCanvas(cameraCanvas);
   }
 
   function setupCameraControls() {
