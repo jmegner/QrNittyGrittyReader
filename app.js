@@ -16,17 +16,17 @@
     const figure = document.createElement('figure');
     figure.className = 'preview-figure';
 
-    const image = document.createElement('img');
-    image.src = dataUrl;
-    image.alt = description || 'Selected image preview';
-    figure.appendChild(image);
-
     if (sourceLabel) {
       const caption = document.createElement('figcaption');
       caption.className = 'preview-source';
       caption.textContent = `Source: ${sourceLabel}`;
       figure.appendChild(caption);
     }
+
+    const image = document.createElement('img');
+    image.src = dataUrl;
+    image.alt = description || 'Selected image preview';
+    figure.appendChild(image);
 
     preview.appendChild(figure);
   }
@@ -43,8 +43,7 @@
 
     const reader = new FileReader();
     reader.addEventListener('load', () => {
-      const sourceLabel = originLabel === 'File' && file.name ? `${originLabel} (${file.name})` : originLabel;
-      setPreviewFromDataUrl(reader.result, file.name, sourceLabel);
+      setPreviewFromDataUrl(reader.result, file.name, originLabel);
     });
     reader.addEventListener('error', () => {
       preview.textContent = 'Unable to read the selected image file.';

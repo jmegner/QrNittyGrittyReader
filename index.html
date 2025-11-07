@@ -35,6 +35,9 @@
 
     #preview figure {
       margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
     }
 
     #preview img {
@@ -46,7 +49,16 @@
     .preview-source {
       font-size: 0.875rem;
       color: #555;
-      margin-top: 0.5rem;
+    }
+
+    #image-input {
+      font-size: 1rem;
+    }
+
+    #image-input::file-selector-button,
+    #image-input::-webkit-file-upload-button {
+      padding: 1.5rem 3rem;
+      font-size: 1.125rem;
     }
 
     #camera-controls {
