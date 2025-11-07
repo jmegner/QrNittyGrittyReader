@@ -218,6 +218,24 @@
     stopCameraButton.disabled = true;
   }
 
+  async function getRearCameraStream() {
+    // Try progressively stronger hints for the rear (environment) camera
+    const candidates = [
+      { video: { facingMode: { exact: 'environment' } } },
+      { video: { facingMode: { ideal: 'environment' } } },
+      { video: true },
+    ];
+    let lastError = null;
+    for (const constraints of candidates) {
+      try {
+        return await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    throw lastError || new Error('Unable to acquire camera');
+  }
+
   async function startCamera() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       preview.textContent = 'Camera access is not supported on this browser.';
@@ -225,7 +243,7 @@
     }
 
     try {
-      mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
+      mediaStream = await getRearCameraStream();
       cameraStreamEl.srcObject = mediaStream;
       cameraStreamEl.hidden = false;
       if (typeof cameraStreamEl.play === 'function') {
