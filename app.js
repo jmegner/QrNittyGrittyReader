@@ -5,9 +5,11 @@
   const startCameraButton = document.getElementById('start-camera');
   const capturePhotoButton = document.getElementById('capture-photo');
   const stopCameraButton = document.getElementById('stop-camera');
+  const listCamerasButton = document.getElementById('list-cameras');
   const cameraStreamEl = document.getElementById('camera-stream');
   const cameraCanvas = document.getElementById('camera-canvas');
   const qrOutput = document.getElementById('qr-output');
+  const cameraListEl = document.getElementById('camera-list');
 
   let mediaStream = null;
 
@@ -287,6 +289,9 @@
     startCameraButton.addEventListener('click', startCamera);
     capturePhotoButton.addEventListener('click', capturePhoto);
     stopCameraButton.addEventListener('click', stopCamera);
+    if (listCamerasButton) {
+      listCamerasButton.addEventListener('click', listCameras);
+    }
   }
 
   function init() {
@@ -296,4 +301,46 @@
   }
 
   document.addEventListener('DOMContentLoaded', init);
+
+  async function listCameras() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+      if (cameraListEl) cameraListEl.textContent = 'enumerateDevices not supported.';
+      return;
+    }
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoInputs = devices.filter(d => d.kind === 'videoinput');
+      const info = {
+        now: new Date().toISOString(),
+        videoInputCount: videoInputs.length,
+        videoInputs: videoInputs.map((d, i) => ({
+          index: i,
+          kind: d.kind,
+          deviceId: d.deviceId,
+          label: d.label || '(label hidden - start camera to reveal)',
+          groupId: d.groupId,
+        })),
+      };
+      // If we have an active track, include current settings/capabilities
+      try {
+        const track = mediaStream?.getVideoTracks?.()[0];
+        if (track) {
+          const settings = track.getSettings?.() || {};
+          let capabilities = {};
+          try { capabilities = track.getCapabilities?.() || {}; } catch {}
+          info.activeTrack = {
+            label: track.label,
+            readyState: track.readyState,
+            enabled: track.enabled,
+            muted: track.muted,
+            settings,
+            capabilities,
+          };
+        }
+      } catch {}
+      if (cameraListEl) cameraListEl.textContent = JSON.stringify(info, null, 2);
+    } catch (err) {
+      if (cameraListEl) cameraListEl.textContent = 'Failed to list cameras: ' + (err && err.message || String(err));
+    }
+  }
 })();
