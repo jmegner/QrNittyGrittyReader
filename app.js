@@ -10,6 +10,7 @@
   const cameraCanvas = document.getElementById('camera-canvas');
   const qrOutputNG = document.getElementById('qr-output-ng');
   const qrOutputOriginal = document.getElementById('qr-output-original');
+  const qrOutputZXing = document.getElementById('qr-output-zxing');
   const cameraListEl = document.getElementById('camera-list');
 
   let mediaStream = null;
@@ -60,7 +61,7 @@
     reader.readAsDataURL(file);
   }
 
-  function renderQrResults(ng, original) {
+  function renderQrResults(ng, original, zxing) {
     if (qrOutputNG) {
       try {
         qrOutputNG.textContent = ng ? JSON.stringify(ng, null, 2) : 'No QR code found in image.';
@@ -75,26 +76,32 @@
         qrOutputOriginal.textContent = 'Unable to stringify Original result.';
       }
     }
+    if (qrOutputZXing) {
+      try {
+        qrOutputZXing.textContent = zxing ? JSON.stringify(zxing, null, 2) : 'No QR code found in image.';
+      } catch {
+        qrOutputZXing.textContent = 'Unable to stringify ZXing result.';
+      }
+    }
   }
 
   function decodeFromCanvas(canvas) {
     const ctx = canvas.getContext('2d');
-    if (!ctx) { renderQrResults(null, null); return; }
+    if (!ctx) { return { ng: null, original: null }; }
     const width = canvas.width;
     const height = canvas.height;
     let imageData;
     try {
       imageData = ctx.getImageData(0, 0, width, height);
     } catch {
-      renderQrResults(null, null);
-      return;
+      return { ng: null, original: null };
     }
     const nittyDecoder = window.jsQRNittyGritty || window.jsQR;
     const originalDecoder = window.jsQROriginal || null;
     const options = { inversionAttempts: 'attemptBoth' };
     const ngResult = nittyDecoder ? nittyDecoder(imageData.data, width, height, options) : null;
     const origResult = originalDecoder ? originalDecoder(imageData.data, width, height, options) : null;
-    renderQrResults(ngResult, origResult);
+    return { ng: ngResult, original: origResult };
   }
 
   function decodeFromDataUrl(dataUrl) {
@@ -105,15 +112,52 @@
       canvas.width = img.naturalWidth || img.width;
       canvas.height = img.naturalHeight || img.height;
       const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        renderQrResult(null);
-        return;
-      }
+      if (!ctx) { renderQrResults(null, null, null); return; }
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      decodeFromCanvas(canvas);
+      const { ng, original } = decodeFromCanvas(canvas);
+
+      // Kick off ZXing asynchronously, render immediate jsQR results
+      renderQrResults(ng, original, null);
+      (async () => {
+        let zxingResult = null;
+        try {
+          const ZXing = window.ZXingLib || window.ZXing || null;
+          if (ZXing && ZXing.BrowserQRCodeReader) {
+            if (!window.__qrReader) {
+              window.__qrReader = new ZXing.BrowserQRCodeReader();
+            }
+            const reader = window.__qrReader;
+            const result = await reader.decodeFromImage(img);
+            zxingResult = normalizeZXingResult(result);
+          }
+        } catch (e) {
+          zxingResult = null;
+        }
+        renderQrResults(ng, original, zxingResult);
+      })();
     };
-    img.onerror = () => renderQrResult(null);
+    img.onerror = () => renderQrResults(null, null, null);
     img.src = dataUrl;
+  }
+
+  function normalizeZXingResult(result) {
+    if (!result) return null;
+    try {
+      const plain = {
+        text: result.text ?? (result.getText ? result.getText() : undefined),
+        rawBytes: result.rawBytes ? Array.from(result.rawBytes) : (result.getRawBytes ? Array.from(result.getRawBytes() || []) : undefined),
+        numBits: result.numBits ?? (result.getNumBits ? result.getNumBits() : undefined),
+        resultPoints: result.resultPoints
+          ? result.resultPoints.map(p => ({ x: p.x, y: p.y }))
+          : (result.getResultPoints ? (result.getResultPoints() || []).map(p => ({ x: p.getX ? p.getX() : p.x, y: p.getY ? p.getY() : p.y })) : undefined),
+        barcodeFormat: result.barcodeFormat ?? (result.getBarcodeFormat ? String(result.getBarcodeFormat()) : undefined),
+        resultMetadata: result.resultMetadata ?? (result.getResultMetadata ? result.getResultMetadata() : undefined),
+        timestamp: result.timestamp ?? (result.getTimestamp ? result.getTimestamp() : undefined),
+      };
+      return plain;
+    } catch {
+      return { error: 'Unable to normalize ZXing Result' };
+    }
   }
 
   function preventDefaults(event) {
@@ -282,9 +326,6 @@
 
     const dataUrl = cameraCanvas.toDataURL('image/png');
     setPreviewFromDataUrl(dataUrl, 'Captured image', 'Camera');
-
-    // Use the drawn camera frame directly for decoding
-    decodeFromCanvas(cameraCanvas);
   }
 
   function setupCameraControls() {
