@@ -10,15 +10,28 @@
 
   let mediaStream = null;
 
-  function setPreviewFromDataUrl(dataUrl, description) {
+  function setPreviewFromDataUrl(dataUrl, description, sourceLabel) {
     preview.innerHTML = '';
+
+    const figure = document.createElement('figure');
+    figure.className = 'preview-figure';
+
     const image = document.createElement('img');
     image.src = dataUrl;
     image.alt = description || 'Selected image preview';
-    preview.appendChild(image);
+    figure.appendChild(image);
+
+    if (sourceLabel) {
+      const caption = document.createElement('figcaption');
+      caption.className = 'preview-source';
+      caption.textContent = `Source: ${sourceLabel}`;
+      figure.appendChild(caption);
+    }
+
+    preview.appendChild(figure);
   }
 
-  function handleFile(file) {
+  function handleFile(file, originLabel) {
     if (!file) {
       return;
     }
@@ -30,7 +43,8 @@
 
     const reader = new FileReader();
     reader.addEventListener('load', () => {
-      setPreviewFromDataUrl(reader.result, file.name);
+      const sourceLabel = originLabel === 'File' && file.name ? `${originLabel} (${file.name})` : originLabel;
+      setPreviewFromDataUrl(reader.result, file.name, sourceLabel);
     });
     reader.addEventListener('error', () => {
       preview.textContent = 'Unable to read the selected image file.';
@@ -58,7 +72,7 @@
 
     fileInput.addEventListener('change', (event) => {
       const [file] = event.target.files || [];
-      handleFile(file);
+      handleFile(file, 'File');
     });
   }
 
@@ -79,7 +93,7 @@
     dropArea.addEventListener('drop', (event) => {
       const files = event.dataTransfer.files;
       if (files && files.length > 0) {
-        handleFile(files[0]);
+        handleFile(files[0], 'File');
         return;
       }
 
@@ -89,7 +103,7 @@
           if (item.kind === 'file') {
             const file = item.getAsFile();
             if (file) {
-              handleFile(file);
+              handleFile(file, 'File');
               break;
             }
           }
@@ -113,7 +127,7 @@
       }
 
       if (imageFile) {
-        handleFile(imageFile);
+        handleFile(imageFile, 'Clipboard');
         return;
       }
 
@@ -126,8 +140,20 @@
       mediaStream.getTracks().forEach((track) => track.stop());
       mediaStream = null;
     }
+    if (typeof cameraStreamEl.pause === 'function') {
+      cameraStreamEl.pause();
+    }
     cameraStreamEl.srcObject = null;
+    cameraStreamEl.removeAttribute('src');
+    if (typeof cameraStreamEl.load === 'function') {
+      cameraStreamEl.load();
+    }
     cameraStreamEl.hidden = true;
+    cameraCanvas.hidden = true;
+    const context = cameraCanvas.getContext('2d');
+    if (context) {
+      context.clearRect(0, 0, cameraCanvas.width, cameraCanvas.height);
+    }
     capturePhotoButton.disabled = true;
     stopCameraButton.disabled = true;
   }
@@ -142,6 +168,13 @@
       mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
       cameraStreamEl.srcObject = mediaStream;
       cameraStreamEl.hidden = false;
+      if (typeof cameraStreamEl.play === 'function') {
+        const playPromise = cameraStreamEl.play();
+        if (playPromise && typeof playPromise.catch === 'function') {
+          playPromise.catch(() => {});
+        }
+      }
+      cameraCanvas.hidden = true;
       capturePhotoButton.disabled = false;
       stopCameraButton.disabled = false;
     } catch (error) {
@@ -166,7 +199,7 @@
     cameraCanvas.hidden = false;
 
     const dataUrl = cameraCanvas.toDataURL('image/png');
-    setPreviewFromDataUrl(dataUrl, 'Captured image');
+    setPreviewFromDataUrl(dataUrl, 'Captured image', 'Camera');
   }
 
   function setupCameraControls() {
