@@ -8,7 +8,8 @@
   const listCamerasButton = document.getElementById('list-cameras');
   const cameraStreamEl = document.getElementById('camera-stream');
   const cameraCanvas = document.getElementById('camera-canvas');
-  const qrOutput = document.getElementById('qr-output');
+  const qrOutputNG = document.getElementById('qr-output-ng');
+  const qrOutputOriginal = document.getElementById('qr-output-original');
   const cameraListEl = document.getElementById('camera-list');
 
   let mediaStream = null;
@@ -59,40 +60,41 @@
     reader.readAsDataURL(file);
   }
 
-  function renderQrResult(result) {
-    if (!qrOutput) return;
-    if (!result) {
-      qrOutput.textContent = 'No QR code found in image.';
-      return;
+  function renderQrResults(ng, original) {
+    if (qrOutputNG) {
+      try {
+        qrOutputNG.textContent = ng ? JSON.stringify(ng, null, 2) : 'No QR code found in image.';
+      } catch {
+        qrOutputNG.textContent = 'Unable to stringify Nitty Gritty result.';
+      }
     }
-    try {
-      qrOutput.textContent = JSON.stringify(result, null, 2);
-    } catch {
-      qrOutput.textContent = 'Unable to stringify result.';
+    if (qrOutputOriginal) {
+      try {
+        qrOutputOriginal.textContent = original ? JSON.stringify(original, null, 2) : 'No QR code found in image.';
+      } catch {
+        qrOutputOriginal.textContent = 'Unable to stringify Original result.';
+      }
     }
   }
 
   function decodeFromCanvas(canvas) {
     const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      renderQrResult(null);
-      return;
-    }
+    if (!ctx) { renderQrResults(null, null); return; }
     const width = canvas.width;
     const height = canvas.height;
     let imageData;
     try {
       imageData = ctx.getImageData(0, 0, width, height);
     } catch {
-      renderQrResult(null);
+      renderQrResults(null, null);
       return;
     }
-    if (!window.jsQR) {
-      renderQrResult({ error: 'jsQRNittyGritty not loaded' });
-      return;
-    }
-    const result = window.jsQR(imageData.data, width, height, { inversionAttempts: 'attemptBoth' });
-    renderQrResult(result);
+    const nittyDecoder = window.jsQRNittyGritty || window.jsQR;
+    const originalDecoder = window.jsQROriginal || null;
+    const options = { inversionAttempts: 'attemptBoth' };
+    const ngResult = nittyDecoder ? nittyDecoder(imageData.data, width, height, options) : null;
+    const origResult = originalDecoder ? originalDecoder(imageData.data, width, height, options) : null;
+    renderQrResults(ngResult, origResult);
   }
 
   function decodeFromDataUrl(dataUrl) {

@@ -81,7 +81,7 @@
       background: #000;
     }
 
-    #qr-output {
+    .qr-output, #qr-output {
       max-width: 100%;
       white-space: pre-wrap;
       word-break: break-word;
@@ -130,10 +130,16 @@
 
   <section>
     <h2>QR Decode Result</h2>
-    <pre id="qr-output">No QR decoded yet.</pre>
+    <h3>Nitty Gritty</h3>
+    <pre id="qr-output-ng" class="qr-output">No QR decoded yet.</pre>
+    <h3>Original (jsQR.js)</h3>
+    <pre id="qr-output-original" class="qr-output">No QR decoded yet.</pre>
   </section>
 
+  <script src="jsQR.js"></script>
+  <script>window.jsQROriginal = window.jsQR;</script>
   <script src="jsQRNittyGritty.js"></script>
+  <script>window.jsQRNittyGritty = window.jsQR;</script>
   <script src="app.js" defer></script>
 </body>
 </html>
