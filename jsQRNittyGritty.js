@@ -346,8 +346,6 @@ function scan(matrix) {
                 // Added nitty-gritty metadata
                 dimension: decoded.dimension != null ? decoded.dimension : location_1.dimension,
                 maskPattern: decoded.maskPattern,
-                errorCorrectionLevelIndex: decoded.errorCorrectionLevelIndex,
-                errorCorrectionLevel: decoded.errorCorrectionLevel,
                 errorCorrection: decoded.errorCorrection,
                 location: {
                     topRightCorner: extracted.mappingFunction(location_1.dimension, 0),
@@ -832,8 +830,6 @@ function decodeMatrix(matrix) {
         return Object.assign({}, decodedData, {
             dimension: matrix.height,
             maskPattern: formatInfo.dataMask,
-            errorCorrectionLevelIndex: ecLevelIndex,
-            errorCorrectionLevel: ecLetter,
             errorCorrection: {
                 level: ecLetter,
                 levelIndex: ecLevelIndex,
