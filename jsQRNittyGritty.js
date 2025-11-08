@@ -341,6 +341,7 @@ function scan(matrix) {
             return {
                 binaryData: decoded.bytes,
                 data: decoded.text,
+                chunksWithErrorsBeforErrorCorrection: decoded.chunksWithErrorsBeforErrorCorrection,
                 chunks: decoded.chunks,
                 version: decoded.version,
                 // Added nitty-gritty metadata
@@ -781,11 +782,15 @@ function decodeMatrix(matrix) {
     var totalBytes = dataBlocks.reduce(function (a, b) { return a + b.numDataCodewords; }, 0);
     var resultBytes = new Uint8ClampedArray(totalBytes);
     var resultIndex = 0;
+    var preResultBytes = new Uint8ClampedArray(totalBytes);
+    var preResultIndex = 0;
     var ecBlocksDetails = [];
     var totalErrorsCorrected = 0;
     var correctionsApplied = 0;
     var blocksFailed = 0;
     var ecLevelDetails = version.errorCorrectionLevels[formatInfo.errorCorrectionLevel];
+    var correctedGlobalByteIndexes = [];
+    var dataBytesSoFar = 0;
     for (var _i = 0, dataBlocks_3 = dataBlocks; _i < dataBlocks_3.length; _i++) {
         var dataBlock = dataBlocks_3[_i];
         var twoS = dataBlock.codewords.length - dataBlock.numDataCodewords;
@@ -815,14 +820,70 @@ function decodeMatrix(matrix) {
             var correctedCount = (rsInfo.correctedPositions ? rsInfo.correctedPositions.length : 0);
             correctionsApplied += correctedCount;
             totalErrorsCorrected += correctedCount;
+            if (rsInfo.correctedPositions && rsInfo.correctedPositions.length) {
+                for (var _b = 0, _c = rsInfo.correctedPositions; _b < _c.length; _b++) {
+                    var pos = _c[_b];
+                    if (pos < dataBlock.numDataCodewords) {
+                        correctedGlobalByteIndexes.push(dataBytesSoFar + pos);
+                    }
+                }
+            }
         }
         ecBlocksDetails.push(blockReport);
+        // Collect pre-correction data bytes
+        for (var i = 0; i < dataBlock.numDataCodewords; i++) {
+            preResultBytes[preResultIndex++] = dataBlock.codewords[i];
+        }
+        // Collect post-correction data bytes
         for (var i = 0; i < dataBlock.numDataCodewords; i++) {
             resultBytes[resultIndex++] = correctedBytes[i];
         }
+        dataBytesSoFar += dataBlock.numDataCodewords;
     }
     try {
         var decodedData = decodeData_1.decode(resultBytes, version.versionNumber);
+        var preDecoded = null;
+        try {
+            preDecoded = decodeData_1.decode(preResultBytes, version.versionNumber);
+        }
+        catch (_b) {
+            preDecoded = null;
+        }
+        var chunksWithErrorsBefore = null;
+        if (preDecoded && preDecoded.chunks && correctedGlobalByteIndexes.length > 0) {
+            var affectedBitRanges_1 = correctedGlobalByteIndexes.map(function (idx) { return [idx * 8, idx * 8 + 8]; });
+            chunksWithErrorsBefore = preDecoded.chunks.filter(function (chunk) {
+                if (typeof chunk.startBit !== 'number' || typeof chunk.endBit !== 'number') {
+                    return false;
+                }
+                for (var _i = 0, affectedBitRanges_2 = affectedBitRanges_1; _i < affectedBitRanges_2.length; _i++) {
+                    var range = affectedBitRanges_2[_i];
+                    var s = range[0], e = range[1];
+                    if (chunk.startBit < e && chunk.endBit > s) {
+                        return true;
+                    }
+                }
+                return false;
+            });
+        }
+        // Tag post-correction chunks with affectedByErrorCorrection
+        if (decodedData && decodedData.chunks) {
+            var affectedPostRanges_1 = correctedGlobalByteIndexes.map(function (idx) { return [idx * 8, idx * 8 + 8]; });
+            decodedData.chunks.forEach(function (chunk) {
+                var affected = false;
+                if (typeof chunk.startBit === 'number' && typeof chunk.endBit === 'number' && affectedPostRanges_1.length > 0) {
+                    for (var _i = 0, affectedPostRanges_2 = affectedPostRanges_1; _i < affectedPostRanges_2.length; _i++) {
+                        var range = affectedPostRanges_2[_i];
+                        var s = range[0], e = range[1];
+                        if (chunk.startBit < e && chunk.endBit > s) {
+                            affected = true;
+                            break;
+                        }
+                    }
+                }
+                chunk.affectedByErrorCorrection = affected;
+            });
+        }
         // Attach nitty-gritty details from format and structure
         var ecLevelIndex = formatInfo.errorCorrectionLevel;
         var ecLevelLetters = ["L", "M", "Q", "H"]; // Indexed to match Version.errorCorrectionLevels
@@ -842,6 +903,7 @@ function decodeMatrix(matrix) {
                 blocksFailed: blocksFailed,
                 perBlock: ecBlocksDetails,
             },
+            chunksWithErrorsBeforErrorCorrection: chunksWithErrorsBefore || null,
         });
     }
     catch (_a) {
@@ -1013,8 +1075,10 @@ function decode(data, version) {
         chunks: [],
         version: version,
     };
+    var initialAvailable = stream.available();
     while (stream.available() >= 4) {
         var mode = stream.readBits(4);
+        var chunkStartBit = (initialAvailable - stream.available() - 4);
         if (mode === ModeByte.Terminator) {
             return result;
         }
@@ -1042,6 +1106,8 @@ function decode(data, version) {
                 characterCountBits: 0,
                 dataBits: bodyBits,
                 totalBits: 4 + bodyBits,
+                startBit: chunkStartBit,
+                endBit: (initialAvailable - stream.available()),
             });
         }
         else if (mode === ModeByte.Numeric) {
@@ -1060,6 +1126,8 @@ function decode(data, version) {
                 characterCountBits: ccBits,
                 dataBits: bodyBits - ccBits,
                 totalBits: 4 + bodyBits,
+                startBit: chunkStartBit,
+                endBit: (initialAvailable - stream.available()),
             });
         }
         else if (mode === ModeByte.Alphanumeric) {
@@ -1078,6 +1146,8 @@ function decode(data, version) {
                 characterCountBits: ccBits,
                 dataBits: bodyBits - ccBits,
                 totalBits: 4 + bodyBits,
+                startBit: chunkStartBit,
+                endBit: (initialAvailable - stream.available()),
             });
         }
         else if (mode === ModeByte.Byte) {
@@ -1098,6 +1168,8 @@ function decode(data, version) {
                 characterCountBits: ccBits,
                 dataBits: bodyBits - ccBits,
                 totalBits: 4 + bodyBits,
+                startBit: chunkStartBit,
+                endBit: (initialAvailable - stream.available()),
             });
         }
         else if (mode === ModeByte.Kanji) {
@@ -1117,6 +1189,8 @@ function decode(data, version) {
                 characterCountBits: ccBits,
                 dataBits: bodyBits - ccBits,
                 totalBits: 4 + bodyBits,
+                startBit: chunkStartBit,
+                endBit: (initialAvailable - stream.available()),
             });
         }
     }
