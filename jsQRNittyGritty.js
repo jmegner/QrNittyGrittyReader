@@ -348,6 +348,7 @@ function scan(matrix) {
                 maskPattern: decoded.maskPattern,
                 errorCorrectionLevelIndex: decoded.errorCorrectionLevelIndex,
                 errorCorrectionLevel: decoded.errorCorrectionLevel,
+                errorCorrection: decoded.errorCorrection,
                 location: {
                     topRightCorner: extracted.mappingFunction(location_1.dimension, 0),
                     topLeftCorner: extracted.mappingFunction(0, 0),
@@ -782,12 +783,42 @@ function decodeMatrix(matrix) {
     var totalBytes = dataBlocks.reduce(function (a, b) { return a + b.numDataCodewords; }, 0);
     var resultBytes = new Uint8ClampedArray(totalBytes);
     var resultIndex = 0;
+    var ecBlocksDetails = [];
+    var totalErrorsCorrected = 0;
+    var correctionsApplied = 0;
+    var blocksFailed = 0;
+    var ecLevelDetails = version.errorCorrectionLevels[formatInfo.errorCorrectionLevel];
     for (var _i = 0, dataBlocks_3 = dataBlocks; _i < dataBlocks_3.length; _i++) {
         var dataBlock = dataBlocks_3[_i];
-        var correctedBytes = reedsolomon_1.decode(dataBlock.codewords, dataBlock.codewords.length - dataBlock.numDataCodewords);
+        var twoS = dataBlock.codewords.length - dataBlock.numDataCodewords;
+        var rsInfo = (reedsolomon_1.decodeWithInfo ? reedsolomon_1.decodeWithInfo(dataBlock.codewords, twoS) : null);
+        var correctedBytes = rsInfo && rsInfo.correctedBytes ? rsInfo.correctedBytes : reedsolomon_1.decode(dataBlock.codewords, twoS);
+        var blockReport = {
+            totalCodewords: dataBlock.codewords.length,
+            numDataCodewords: dataBlock.numDataCodewords,
+            numEcCodewords: twoS,
+            hadError: rsInfo ? rsInfo.hadError : null,
+            twoS: twoS,
+            failureStage: rsInfo ? rsInfo.failureStage : null,
+            syndromeCoefficients: rsInfo ? rsInfo.syndromeCoefficients : null,
+            syndromeWeight: rsInfo ? rsInfo.syndromeWeight : null,
+            sigmaCoefficients: rsInfo ? rsInfo.sigmaCoefficients : null,
+            omegaCoefficients: rsInfo ? rsInfo.omegaCoefficients : null,
+            errorLocations: rsInfo ? rsInfo.errorLocations : null,
+            errorMagnitudes: rsInfo ? rsInfo.errorMagnitudes : null,
+            correctedPositions: rsInfo ? rsInfo.correctedPositions : null,
+        };
         if (!correctedBytes) {
+            blocksFailed++;
+            ecBlocksDetails.push(blockReport);
             return null;
         }
+        if (rsInfo) {
+            var correctedCount = (rsInfo.correctedPositions ? rsInfo.correctedPositions.length : 0);
+            correctionsApplied += correctedCount;
+            totalErrorsCorrected += correctedCount;
+        }
+        ecBlocksDetails.push(blockReport);
         for (var i = 0; i < dataBlock.numDataCodewords; i++) {
             resultBytes[resultIndex++] = correctedBytes[i];
         }
@@ -803,6 +834,18 @@ function decodeMatrix(matrix) {
             maskPattern: formatInfo.dataMask,
             errorCorrectionLevelIndex: ecLevelIndex,
             errorCorrectionLevel: ecLetter,
+            errorCorrection: {
+                level: ecLetter,
+                levelIndex: ecLevelIndex,
+                ecCodewordsPerBlock: ecLevelDetails ? ecLevelDetails.ecCodewordsPerBlock : null,
+                blocksLayout: ecLevelDetails ? ecLevelDetails.ecBlocks : null,
+                totalBlocks: dataBlocks.length,
+                totalDataCodewords: totalBytes,
+                totalErrorsCorrected: totalErrorsCorrected,
+                correctionsApplied: correctionsApplied,
+                blocksFailed: blocksFailed,
+                perBlock: ecBlocksDetails,
+            },
         });
     }
     catch (_a) {
@@ -8322,6 +8365,75 @@ function decode(bytes, twoS) {
     return outputBytes;
 }
 exports.decode = decode;
+
+// Added: verbose variant that returns intermediate RS decoding details
+function decodeWithInfo(bytes, twoS) {
+    var info = {
+        correctedBytes: null,
+        hadError: false,
+        failureStage: null,
+        syndromeCoefficients: [],
+        syndromeWeight: 0,
+        twoS: twoS,
+        sigmaCoefficients: null,
+        omegaCoefficients: null,
+        errorLocations: null,
+        errorMagnitudes: null,
+        correctedPositions: null,
+        field: { primitive: 0x011D, size: 256, generatorBase: 0 },
+    };
+    var outputBytes = new Uint8ClampedArray(bytes.length);
+    outputBytes.set(bytes);
+    var field = new GenericGF_1.default(0x011D, 256, 0);
+    var poly = new GenericGFPoly_1.default(field, outputBytes);
+    var syndromeCoefficients = new Uint8ClampedArray(twoS);
+    var error = false;
+    for (var s = 0; s < twoS; s++) {
+        var evaluation = poly.evaluateAt(field.exp(s + field.generatorBase));
+        syndromeCoefficients[syndromeCoefficients.length - 1 - s] = evaluation;
+        if (evaluation !== 0) {
+            error = true;
+        }
+    }
+    info.hadError = error;
+    info.syndromeCoefficients = Array.from(syndromeCoefficients);
+    info.syndromeWeight = info.syndromeCoefficients.reduce(function (acc, v) { return acc + (v !== 0 ? 1 : 0); }, 0);
+    if (!error) {
+        info.correctedBytes = outputBytes;
+        info.correctedPositions = [];
+        return info;
+    }
+    var syndrome = new GenericGFPoly_1.default(field, syndromeCoefficients);
+    var sigmaOmega = runEuclideanAlgorithm(field, field.buildMonomial(twoS, 1), syndrome, twoS);
+    if (sigmaOmega === null) {
+        info.failureStage = 'euclidean';
+        return info;
+    }
+    info.sigmaCoefficients = Array.from(sigmaOmega[0].coefficients || []);
+    info.omegaCoefficients = Array.from(sigmaOmega[1].coefficients || []);
+    var errorLocations = findErrorLocations(field, sigmaOmega[0]);
+    if (errorLocations == null) {
+        info.failureStage = 'locations';
+        return info;
+    }
+    info.errorLocations = Array.from(errorLocations);
+    var errorMagnitudes = findErrorMagnitudes(field, sigmaOmega[1], errorLocations);
+    info.errorMagnitudes = Array.from(errorMagnitudes);
+    var correctedPositions = [];
+    for (var i = 0; i < errorLocations.length; i++) {
+        var position = outputBytes.length - 1 - field.log(errorLocations[i]);
+        if (position < 0) {
+            info.failureStage = 'positionOutOfRange';
+            return info;
+        }
+        outputBytes[position] = GenericGF_1.addOrSubtractGF(outputBytes[position], errorMagnitudes[i]);
+        correctedPositions.push(position);
+    }
+    info.correctedPositions = correctedPositions;
+    info.correctedBytes = outputBytes;
+    return info;
+}
+exports.decodeWithInfo = decodeWithInfo;
 
 
 /***/ }),
