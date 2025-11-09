@@ -5,6 +5,8 @@
   const startCameraButton = document.getElementById('start-camera');
   const capturePhotoButton = document.getElementById('capture-photo');
   const stopCameraButton = document.getElementById('stop-camera');
+  const startCameraScanButton = document.getElementById('start-camera-scan');
+  const stopCameraScanButton = document.getElementById('stop-camera-scan');
   const listCamerasButton = document.getElementById('list-cameras');
   const cameraStreamEl = document.getElementById('camera-stream');
   const cameraCanvas = document.getElementById('camera-canvas');
@@ -14,6 +16,9 @@
   const cameraListEl = document.getElementById('camera-list');
 
   let mediaStream = null;
+  let scanning = false;
+  let scanRafId = null;
+  let scanCanvas = null; // Offscreen canvas for scanning loop
 
   function setPreviewFromDataUrl(dataUrl, description, sourceLabel) {
     preview.innerHTML = '';
@@ -264,6 +269,14 @@
     }
     capturePhotoButton.disabled = true;
     stopCameraButton.disabled = true;
+    // Scanning-related UI
+    scanning = false;
+    if (scanRafId) {
+      cancelAnimationFrame(scanRafId);
+      scanRafId = null;
+    }
+    if (stopCameraScanButton) stopCameraScanButton.disabled = true;
+    if (startCameraScanButton) startCameraScanButton.disabled = false;
   }
 
   async function getRearCameraStream() {
@@ -303,6 +316,8 @@
       cameraCanvas.hidden = true;
       capturePhotoButton.disabled = false;
       stopCameraButton.disabled = false;
+      if (startCameraScanButton) startCameraScanButton.disabled = false;
+      if (stopCameraScanButton) stopCameraScanButton.disabled = true;
     } catch (error) {
       preview.textContent = 'Unable to access the camera.';
     }
@@ -332,6 +347,12 @@
     startCameraButton.addEventListener('click', startCamera);
     capturePhotoButton.addEventListener('click', capturePhoto);
     stopCameraButton.addEventListener('click', stopCamera);
+    if (startCameraScanButton) {
+      startCameraScanButton.addEventListener('click', startCameraScan);
+    }
+    if (stopCameraScanButton) {
+      stopCameraScanButton.addEventListener('click', stopCameraScan);
+    }
     if (listCamerasButton) {
       listCamerasButton.addEventListener('click', listCameras);
     }
@@ -385,5 +406,121 @@
     } catch (err) {
       if (cameraListEl) cameraListEl.textContent = 'Failed to list cameras: ' + (err && err.message || String(err));
     }
+  }
+
+  // Camera Scan Mode
+  async function ensureCameraReady() {
+    if (!mediaStream) {
+      await startCamera();
+    }
+    // Wait for video to have dimensions
+    if (cameraStreamEl.readyState < 2 || !cameraStreamEl.videoWidth) {
+      await new Promise((resolve) => {
+        const onLoaded = () => {
+          cameraStreamEl.removeEventListener('loadedmetadata', onLoaded);
+          cameraStreamEl.removeEventListener('loadeddata', onLoaded);
+          resolve();
+        };
+        cameraStreamEl.addEventListener('loadedmetadata', onLoaded, { once: true });
+        cameraStreamEl.addEventListener('loadeddata', onLoaded, { once: true });
+      });
+    }
+  }
+
+  function getScanCanvas() {
+    if (scanCanvas) return scanCanvas;
+    // Prefer OffscreenCanvas if available
+    try {
+      if (typeof OffscreenCanvas !== 'undefined') {
+        scanCanvas = new OffscreenCanvas(1, 1);
+        return scanCanvas;
+      }
+    } catch {}
+    // Fallback to hidden in-DOM canvas
+    const c = document.createElement('canvas');
+    c.width = 1; c.height = 1; c.style.display = 'none';
+    document.body.appendChild(c);
+    scanCanvas = c;
+    return scanCanvas;
+  }
+
+  function scanFrame() {
+    if (!scanning || !mediaStream) { return; }
+    const width = cameraStreamEl.videoWidth || 640;
+    const height = cameraStreamEl.videoHeight || 480;
+    const c = getScanCanvas();
+    // Set canvas size
+    if (c instanceof HTMLCanvasElement) {
+      if (c.width !== width) c.width = width;
+      if (c.height !== height) c.height = height;
+      const ctx = c.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(cameraStreamEl, 0, 0, width, height);
+        try {
+          const imageData = ctx.getImageData(0, 0, width, height);
+          const nittyDecoder = window.jsQRNittyGritty || window.jsQR;
+          const options = { inversionAttempts: 'attemptBoth' };
+          const ngResult = nittyDecoder ? nittyDecoder(imageData.data, width, height, options) : null;
+          if (ngResult) {
+            renderQrResults(ngResult, null, null);
+            // Stop scanning and camera on success
+            stopCamera();
+            scanning = false;
+            return;
+          }
+        } catch {}
+      }
+    } else if (typeof c.getContext === 'function') { // OffscreenCanvas
+      c.width = width; c.height = height;
+      const ctx = c.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(cameraStreamEl, 0, 0, width, height);
+        try {
+          const imageData = ctx.getImageData(0, 0, width, height);
+          const nittyDecoder = window.jsQRNittyGritty || window.jsQR;
+          const options = { inversionAttempts: 'attemptBoth' };
+          const ngResult = nittyDecoder ? nittyDecoder(imageData.data, width, height, options) : null;
+          if (ngResult) {
+            renderQrResults(ngResult, null, null);
+            stopCamera();
+            scanning = false;
+            return;
+          }
+        } catch {}
+      }
+    }
+    scanRafId = requestAnimationFrame(scanFrame);
+  }
+
+  async function startCameraScan() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      preview.textContent = 'Camera access is not supported on this browser.';
+      return;
+    }
+    if (scanning) return;
+    try {
+      await ensureCameraReady();
+      scanning = true;
+      if (startCameraScanButton) startCameraScanButton.disabled = true;
+      if (stopCameraScanButton) stopCameraScanButton.disabled = false;
+      // While scanning, disable capture to reduce confusion
+      capturePhotoButton.disabled = true;
+      scanRafId = requestAnimationFrame(scanFrame);
+    } catch (e) {
+      preview.textContent = 'Unable to start camera scan.';
+    }
+  }
+
+  function stopCameraScan() {
+    if (!scanning && !mediaStream) {
+      return;
+    }
+    scanning = false;
+    if (scanRafId) {
+      cancelAnimationFrame(scanRafId);
+      scanRafId = null;
+    }
+    // Per requirement, stopping scan stops the camera stream
+    stopCamera();
   }
 })();
