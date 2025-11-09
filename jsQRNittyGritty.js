@@ -962,6 +962,48 @@ var ModeByte;
     // FNC1FirstPosition = 0x5,
     // FNC1SecondPosition = 0x9,
 })(ModeByte || (ModeByte = {}));
+function eciAssignmentDescription(n) {
+    var map = {
+        0: "CP437 (DOS Latin US) — default for QR Byte mode",
+        2: "CP437 (DOS Latin US)",
+        3: "ISO/IEC 8859-1 (Latin-1): Western European",
+        4: "ISO/IEC 8859-2 (Latin-2): Central/Eastern European",
+        5: "ISO/IEC 8859-3 (Latin-3): South European",
+        6: "ISO/IEC 8859-4 (Latin-4): North European (Nordic/Scandinavian)",
+        7: "ISO/IEC 8859-5: Cyrillic",
+        8: "ISO/IEC 8859-6: Arabic",
+        9: "ISO/IEC 8859-7: Greek",
+        10: "ISO/IEC 8859-8: Hebrew",
+        11: "ISO/IEC 8859-9 (Latin-5): Turkish",
+        12: "ISO/IEC 8859-10 (Latin-6): Nordic languages",
+        13: "ISO/IEC 8859-11: Thai",
+        14: "Reserved",
+        15: "ISO/IEC 8859-13 (Latin-7): Baltic languages",
+        16: "ISO/IEC 8859-14 (Latin-8): Celtic languages",
+        17: "ISO/IEC 8859-15 (Latin-9): Western European (with euro symbol)",
+        18: "ISO/IEC 8859-16 (Latin-10): South-Eastern European",
+        19: "Reserved",
+        20: "Shift_JIS (JIS X 0208 + JIS X 0201): Japanese",
+        21: "Windows-1250, superset of Latin-2",
+        22: "Windows-1251, superset of Latin/Cyrillic",
+        23: "Windows-1252, superset of Latin-1",
+        24: "Windows-1256, Arabic",
+        25: "UTF-16, big endian",
+        26: "UTF-8",
+        27: "US-ASCII, specifically ISO/IEC 646:1991 IRV",
+        28: "Big 5, Chinese",
+        29: "GB/T 2312",
+        30: "KS X 1001",
+        31: "GBK",
+        32: "GB 18030",
+        33: "UTF-16, little endian",
+        34: "UTF-32, big endian",
+        35: "UTF-32, little endian",
+        170: "ISO/IEC 646 INV",
+        899: "8-bit binary data"
+    };
+    return map[n] || ("Unknown ECI " + n);
+}
 function decodeNumeric(stream, size) {
     var bytes = [];
     var text = "";
@@ -1102,6 +1144,7 @@ function decode(data, version) {
             result.chunks.push({
                 type: Mode.ECI,
                 assignmentNumber: assignmentNumber,
+                assignmentNumberDescription: eciAssignmentDescription(assignmentNumber),
                 modeIndicatorBits: 4,
                 characterCountBits: 0,
                 dataBits: bodyBits,
