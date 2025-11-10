@@ -44,6 +44,28 @@
     decodeFromDataUrl(dataUrl);
   }
 
+  // Set preview image without triggering decode (used for camera scan success snapshot)
+  function setPreviewOnlyFromDataUrl(dataUrl, description, sourceLabel) {
+    preview.innerHTML = '';
+
+    const figure = document.createElement('figure');
+    figure.className = 'preview-figure';
+
+    if (sourceLabel) {
+      const caption = document.createElement('figcaption');
+      caption.className = 'preview-source';
+      caption.textContent = `Source: ${sourceLabel}`;
+      figure.appendChild(caption);
+    }
+
+    const image = document.createElement('img');
+    image.src = dataUrl;
+    image.alt = description || 'Selected image preview';
+    figure.appendChild(image);
+
+    preview.appendChild(figure);
+  }
+
   function handleFile(file, originLabel) {
     if (!file) {
       return;
@@ -462,6 +484,18 @@
           const options = { inversionAttempts: 'attemptBoth' };
           const ngResult = nittyDecoder ? nittyDecoder(imageData.data, width, height, options) : null;
           if (ngResult) {
+            // Update Preview with the successful frame
+            try {
+              // Always use on-page cameraCanvas to snapshot
+              cameraCanvas.width = width;
+              cameraCanvas.height = height;
+              const snapCtx = cameraCanvas.getContext('2d');
+              if (snapCtx) {
+                snapCtx.drawImage(cameraStreamEl, 0, 0, width, height);
+                const dataUrl = cameraCanvas.toDataURL('image/png');
+                setPreviewOnlyFromDataUrl(dataUrl, 'Decoded frame', 'Camera Scan');
+              }
+            } catch {}
             renderQrResults(ngResult, null, null);
             // Stop scanning and camera on success
             stopCamera();
@@ -481,6 +515,16 @@
           const options = { inversionAttempts: 'attemptBoth' };
           const ngResult = nittyDecoder ? nittyDecoder(imageData.data, width, height, options) : null;
           if (ngResult) {
+            try {
+              cameraCanvas.width = width;
+              cameraCanvas.height = height;
+              const snapCtx = cameraCanvas.getContext('2d');
+              if (snapCtx) {
+                snapCtx.drawImage(cameraStreamEl, 0, 0, width, height);
+                const dataUrl = cameraCanvas.toDataURL('image/png');
+                setPreviewOnlyFromDataUrl(dataUrl, 'Decoded frame', 'Camera Scan');
+              }
+            } catch {}
             renderQrResults(ngResult, null, null);
             stopCamera();
             scanning = false;
