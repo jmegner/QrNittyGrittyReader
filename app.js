@@ -484,19 +484,56 @@
           const options = { inversionAttempts: 'attemptBoth' };
           const ngResult = nittyDecoder ? nittyDecoder(imageData.data, width, height, options) : null;
           if (ngResult) {
-            // Update Preview with the successful frame
+            let origResult = null;
             try {
-              // Always use on-page cameraCanvas to snapshot
+              const originalDecoder = window.jsQROriginal || null;
+              if (originalDecoder) {
+                origResult = originalDecoder(imageData.data, width, height, options);
+              }
+            } catch {}
+
+            // Update Preview with the successful frame and kick off ZXing
+            let dataUrl = null;
+            try {
               cameraCanvas.width = width;
               cameraCanvas.height = height;
               const snapCtx = cameraCanvas.getContext('2d');
               if (snapCtx) {
                 snapCtx.drawImage(cameraStreamEl, 0, 0, width, height);
-                const dataUrl = cameraCanvas.toDataURL('image/png');
+                dataUrl = cameraCanvas.toDataURL('image/png');
                 setPreviewOnlyFromDataUrl(dataUrl, 'Decoded frame', 'Camera Scan');
               }
             } catch {}
-            renderQrResults(ngResult, null, null);
+
+            // Render immediate ng + original
+            renderQrResults(ngResult, origResult, null);
+
+            // Start ZXing decode asynchronously using the snapshot
+            (async () => {
+              let zxingResult = null;
+              try {
+                if (dataUrl) {
+                  const ZXing = window.ZXingLib || window.ZXing || null;
+                  if (ZXing && ZXing.BrowserQRCodeReader) {
+                    if (!window.__qrReader) {
+                      window.__qrReader = new ZXing.BrowserQRCodeReader();
+                    }
+                    const reader = window.__qrReader;
+                    // Use Image element to decode the snapshot
+                    const img = new Image();
+                    await new Promise((resolve, reject) => {
+                      img.onload = resolve;
+                      img.onerror = reject;
+                      img.src = dataUrl;
+                    });
+                    const result = await reader.decodeFromImage(img);
+                    zxingResult = normalizeZXingResult(result);
+                  }
+                }
+              } catch {}
+              renderQrResults(ngResult, origResult, zxingResult);
+            })();
+
             // Stop scanning and camera on success
             stopCamera();
             scanning = false;
@@ -515,17 +552,52 @@
           const options = { inversionAttempts: 'attemptBoth' };
           const ngResult = nittyDecoder ? nittyDecoder(imageData.data, width, height, options) : null;
           if (ngResult) {
+            let origResult = null;
+            try {
+              const originalDecoder = window.jsQROriginal || null;
+              if (originalDecoder) {
+                origResult = originalDecoder(imageData.data, width, height, options);
+              }
+            } catch {}
+
+            let dataUrl = null;
             try {
               cameraCanvas.width = width;
               cameraCanvas.height = height;
               const snapCtx = cameraCanvas.getContext('2d');
               if (snapCtx) {
                 snapCtx.drawImage(cameraStreamEl, 0, 0, width, height);
-                const dataUrl = cameraCanvas.toDataURL('image/png');
+                dataUrl = cameraCanvas.toDataURL('image/png');
                 setPreviewOnlyFromDataUrl(dataUrl, 'Decoded frame', 'Camera Scan');
               }
             } catch {}
-            renderQrResults(ngResult, null, null);
+
+            renderQrResults(ngResult, origResult, null);
+
+            (async () => {
+              let zxingResult = null;
+              try {
+                if (dataUrl) {
+                  const ZXing = window.ZXingLib || window.ZXing || null;
+                  if (ZXing && ZXing.BrowserQRCodeReader) {
+                    if (!window.__qrReader) {
+                      window.__qrReader = new ZXing.BrowserQRCodeReader();
+                    }
+                    const reader = window.__qrReader;
+                    const img = new Image();
+                    await new Promise((resolve, reject) => {
+                      img.onload = resolve;
+                      img.onerror = reject;
+                      img.src = dataUrl;
+                    });
+                    const result = await reader.decodeFromImage(img);
+                    zxingResult = normalizeZXingResult(result);
+                  }
+                }
+              } catch {}
+              renderQrResults(ngResult, origResult, zxingResult);
+            })();
+
             stopCamera();
             scanning = false;
             return;
