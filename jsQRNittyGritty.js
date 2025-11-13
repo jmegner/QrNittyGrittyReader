@@ -341,7 +341,7 @@ function scan(matrix) {
             return {
                 binaryData: decoded.bytes,
                 data: decoded.text,
-                chunksWithErrorsBeforErrorCorrection: decoded.chunksWithErrorsBeforErrorCorrection,
+                chunksWithErrorsBeforeErrorCorrection: decoded.chunksWithErrorsBeforeErrorCorrection,
                 chunks: decoded.chunks,
                 version: decoded.version,
                 padding: decoded.padding,
@@ -850,7 +850,7 @@ function decodeMatrix(matrix) {
         catch (_b) {
             preDecoded = null;
         }
-        var chunksWithErrorsBefore = null;
+        var chunksWithErrorsBefore = [];
         if (preDecoded && preDecoded.chunks && correctedGlobalByteIndexes.length > 0) {
             var affectedBitRanges_1 = correctedGlobalByteIndexes.map(function (idx) { return [idx * 8, idx * 8 + 8]; });
             chunksWithErrorsBefore = preDecoded.chunks.filter(function (chunk) {
@@ -917,7 +917,7 @@ function decodeMatrix(matrix) {
                 blocksFailed: blocksFailed,
                 perBlock: ecBlocksDetails,
             },
-            chunksWithErrorsBeforErrorCorrection: chunksWithErrorsBefore || null,
+            chunksWithErrorsBeforeErrorCorrection: chunksWithErrorsBefore,
         });
         if (baseDecoded.padding) {
             finalResult.padding = baseDecoded.padding;
