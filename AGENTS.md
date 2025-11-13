@@ -11,6 +11,10 @@ mind while working anywhere in this repository:
 2. **QR decoding libraries**
    - `jsQRNittyGritty.js` is a customized fork of `jsQR.js` that returns extra
      debugging metadata. Prefer working here when changing detection behavior.
+     Also, when adding information to be shown to the user, be sure to attach
+     that info to the return object in the `scan` function.  Only adding it to
+     the `decode` or `extract` return objects won't make it back all the way to
+     the user.
    - `jsQR.js` contains the original upstream logic. Keep it untouched unless a
      sync/bugfix is explicitly required.
    - `zxing_v0-21-3.js` is a third-party fallback decoder. Avoid editing unless
