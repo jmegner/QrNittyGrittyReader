@@ -374,6 +374,10 @@
 
     const dataUrl = cameraCanvas.toDataURL('image/png');
     setPreviewFromDataUrl(dataUrl, 'Captured image', 'Camera');
+
+    // After capturing a still, stop the camera stream so the snapshot only appears
+    // in the preview section and we release hardware resources immediately.
+    stopCamera();
   }
 
   function setupCameraControls() {
