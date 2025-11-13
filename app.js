@@ -14,6 +14,7 @@
   const qrOutputZXing = document.getElementById('qr-output-zxing');
   const cameraListEl = document.getElementById('camera-list');
   const cameraSection = document.getElementById('camera-section');
+  const cameraControls = document.getElementById('camera-controls');
 
   let mediaStream = null;
   let scanning = false;
@@ -344,13 +345,14 @@
   }
 
   function scrollCameraControlsIntoView() {
-    if (!cameraSection) {
+    const targetEl = cameraControls || cameraSection;
+    if (!targetEl) {
       return;
     }
     try {
-      cameraSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch {
-      const rect = cameraSection.getBoundingClientRect();
+      const rect = targetEl.getBoundingClientRect();
       window.scrollTo(0, window.scrollY + rect.top);
     }
   }
