@@ -344,6 +344,7 @@ function scan(matrix) {
                 chunksWithErrorsBeforErrorCorrection: decoded.chunksWithErrorsBeforErrorCorrection,
                 chunks: decoded.chunks,
                 version: decoded.version,
+                padding: decoded.padding,
                 // Added nitty-gritty metadata
                 dimension: decoded.dimension != null ? decoded.dimension : location_1.dimension,
                 maskPattern: decoded.maskPattern,
