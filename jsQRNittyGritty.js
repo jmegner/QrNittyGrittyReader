@@ -339,15 +339,14 @@ function scan(matrix) {
         var decoded = decoder_1.decode(extracted.matrix);
         if (decoded) {
             return {
-                binaryData: decoded.bytes,
-                data: decoded.text,
-                chunksWithErrorsBeforeErrorCorrection: decoded.chunksWithErrorsBeforeErrorCorrection,
-                chunks: decoded.chunks,
-                version: decoded.version,
-                padding: decoded.padding,
-                // Added nitty-gritty metadata
+				data: decoded.text,
+				version: decoded.version,
                 dimension: decoded.dimension != null ? decoded.dimension : location_1.dimension,
                 maskPattern: decoded.maskPattern,
+                binaryData: decoded.bytes,
+                chunks: decoded.chunks,
+                padding: decoded.padding,
+				chunksWithErrorsBeforeErrorCorrection: decoded.chunksWithErrorsBeforeErrorCorrection,
                 errorCorrection: decoded.errorCorrection,
                 location: {
                     topRightCorner: extracted.mappingFunction(location_1.dimension, 0),
