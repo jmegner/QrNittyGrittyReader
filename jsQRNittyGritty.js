@@ -884,6 +884,18 @@ function decodeMatrix(matrix) {
                 chunk.affectedByErrorCorrection = affected;
             });
         }
+        // Attach padding bytes sampled before Reed-Solomon correction
+        if (decodedData && decodedData.padding) {
+            var padIndex = typeof decodedData.padding.padByteStartIndex === 'number'
+                ? decodedData.padding.padByteStartIndex
+                : preResultBytes.length;
+            var beforeCorrection = [];
+            for (var i = padIndex; i < preResultBytes.length; i++) {
+                beforeCorrection.push(preResultBytes[i]);
+            }
+            decodedData.padding.paddingBytesBeforeCorrection = beforeCorrection;
+            delete decodedData.padding.padByteStartIndex;
+        }
         // Attach nitty-gritty details from format and structure
         var ecLevelIndex = formatInfo.errorCorrectionLevel;
         var ecLevelLetters = ["L", "M", "Q", "H"]; // Indexed to match Version.errorCorrectionLevels
@@ -1118,11 +1130,16 @@ function decode(data, version) {
         version: version,
     };
     var initialAvailable = stream.available();
+    var totalBits = data.length * 8;
+    var paddingStartBit = null;
+    var terminatorBitLength = 0;
     while (stream.available() >= 4) {
         var mode = stream.readBits(4);
         var chunkStartBit = (initialAvailable - stream.available() - 4);
         if (mode === ModeByte.Terminator) {
-            return result;
+            paddingStartBit = chunkStartBit;
+            terminatorBitLength = 4;
+            break;
         }
         else if (mode === ModeByte.ECI) {
             var before = stream.available();
@@ -1237,12 +1254,54 @@ function decode(data, version) {
             });
         }
     }
-    // If there is no data left, or the remaining bits are all 0, then that counts as a termination marker
-    if (stream.available() === 0 || stream.readBits(stream.available()) === 0) {
-        return result;
+    if (paddingStartBit === null) {
+        if (stream.available() === 0) {
+            paddingStartBit = totalBits;
+        }
+        else {
+            var remainingBits = stream.available();
+            var remainderValue = stream.readBits(remainingBits);
+            if (remainderValue === 0) {
+                paddingStartBit = initialAvailable - remainingBits;
+            }
+            else {
+                return undefined;
+            }
+        }
     }
+    var paddingInfo = calculatePaddingInfo(paddingStartBit, terminatorBitLength, totalBits, data.length);
+    result.padding = paddingInfo;
+    return result;
 }
 exports.decode = decode;
+
+function calculatePaddingInfo(startBit, terminatorBits, totalBits, totalBytes) {
+    var safeStart = Math.min(Math.max(startBit, 0), totalBits);
+    var endBit = totalBits;
+    var afterTerminator = Math.min(endBit, safeStart + terminatorBits);
+    var remainingAfterTerminator = endBit - afterTerminator;
+    var padBits = 0;
+    if (remainingAfterTerminator > 0) {
+        padBits = (8 - (afterTerminator % 8)) % 8;
+        if (padBits > remainingAfterTerminator) {
+            padBits = remainingAfterTerminator;
+        }
+    }
+    var afterPadBits = afterTerminator + padBits;
+    if (afterPadBits > endBit) {
+        afterPadBits = endBit;
+    }
+    var padBytes = Math.max(0, Math.floor((endBit - afterPadBits) / 8));
+    var padByteStartIndex = Math.min(totalBytes, Math.floor(afterPadBits / 8));
+    return {
+        startBit: safeStart,
+        endBit: endBit,
+        numPaddingBits: padBits,
+        numPaddingBytes: padBytes,
+        paddingBytesBeforeCorrection: [],
+        padByteStartIndex: padByteStartIndex,
+    };
+}
 
 
 /***/ }),
