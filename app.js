@@ -7,6 +7,7 @@
   const stopCameraButton = document.getElementById('stop-camera');
   const startCameraScanButton = document.getElementById('start-camera-scan');
   const listCamerasButton = document.getElementById('list-cameras');
+  const listCamerasFallbackLabel = 'list cameras';
   const cameraStreamEl = document.getElementById('camera-stream');
   const cameraCanvas = document.getElementById('camera-canvas');
   const qrOutputNG = document.getElementById('qr-output-ng');
@@ -20,6 +21,7 @@
   let scanning = false;
   let scanRafId = null;
   let scanCanvas = null; // Offscreen canvas for scanning loop
+  let cameraListDisplayToken = 0;
 
   function setPreviewFromDataUrl(dataUrl, description, sourceLabel) {
     preview.innerHTML = '';
@@ -394,7 +396,7 @@
       });
     }
     if (listCamerasButton) {
-      listCamerasButton.addEventListener('click', listCameras);
+      listCamerasButton.addEventListener('click', handleListCamerasButtonClick);
     }
   }
 
@@ -406,9 +408,61 @@
 
   document.addEventListener('DOMContentLoaded', init);
 
-  async function listCameras() {
+  function rememberListCamerasOriginalLabel() {
+    if (!listCamerasButton) {
+      return listCamerasFallbackLabel;
+    }
+    if (!listCamerasButton.dataset.originalLabel) {
+      const label = (listCamerasButton.textContent || '').trim() || listCamerasFallbackLabel;
+      listCamerasButton.dataset.originalLabel = label;
+    }
+    return listCamerasButton.dataset.originalLabel;
+  }
+
+  function setListCamerasButtonToClear() {
+    if (!listCamerasButton) {
+      return;
+    }
+    rememberListCamerasOriginalLabel();
+    listCamerasButton.textContent = 'clear list';
+    listCamerasButton.dataset.listState = 'showing';
+  }
+
+  function resetListCamerasButton() {
+    if (!listCamerasButton) {
+      return;
+    }
+    const originalLabel = rememberListCamerasOriginalLabel();
+    listCamerasButton.textContent = originalLabel;
+    delete listCamerasButton.dataset.listState;
+  }
+
+  function clearCameraListDisplay() {
+    if (cameraListEl) {
+      cameraListEl.textContent = '';
+    }
+  }
+
+  function handleListCamerasButtonClick() {
+    if (!listCamerasButton) {
+      return;
+    }
+    if (listCamerasButton.dataset.listState === 'showing') {
+      cameraListDisplayToken += 1;
+      clearCameraListDisplay();
+      resetListCamerasButton();
+      return;
+    }
+    setListCamerasButtonToClear();
+    const requestToken = ++cameraListDisplayToken;
+    listCameras(requestToken);
+  }
+
+  async function listCameras(requestToken = cameraListDisplayToken) {
     if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
-      if (cameraListEl) cameraListEl.textContent = 'enumerateDevices not supported.';
+      if (cameraListEl && requestToken === cameraListDisplayToken) {
+        cameraListEl.textContent = 'enumerateDevices not supported.';
+      }
       return;
     }
     try {
@@ -442,9 +496,13 @@
           };
         }
       } catch {}
-      if (cameraListEl) cameraListEl.textContent = JSON.stringify(info, null, 2);
+      if (cameraListEl && requestToken === cameraListDisplayToken) {
+        cameraListEl.textContent = JSON.stringify(info, null, 2);
+      }
     } catch (err) {
-      if (cameraListEl) cameraListEl.textContent = 'Failed to list cameras: ' + (err && err.message || String(err));
+      if (cameraListEl && requestToken === cameraListDisplayToken) {
+        cameraListEl.textContent = 'Failed to list cameras: ' + (err && err.message || String(err));
+      }
     }
   }
 
