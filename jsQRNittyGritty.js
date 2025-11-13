@@ -900,7 +900,8 @@ function decodeMatrix(matrix) {
         var ecLevelIndex = formatInfo.errorCorrectionLevel;
         var ecLevelLetters = ["L", "M", "Q", "H"]; // Indexed to match Version.errorCorrectionLevels
         var ecLetter = ecLevelLetters[ecLevelIndex] || null;
-        return Object.assign({}, decodedData, {
+        var baseDecoded = decodedData || {};
+        var finalResult = Object.assign({}, baseDecoded, {
             dimension: matrix.height,
             maskPattern: formatInfo.dataMask,
             errorCorrection: {
@@ -917,6 +918,10 @@ function decodeMatrix(matrix) {
             },
             chunksWithErrorsBeforErrorCorrection: chunksWithErrorsBefore || null,
         });
+        if (baseDecoded.padding) {
+            finalResult.padding = baseDecoded.padding;
+        }
+        return finalResult;
     }
     catch (_a) {
         return null;
