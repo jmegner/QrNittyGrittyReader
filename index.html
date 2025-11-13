@@ -1,25 +1,29 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
+<html lang="en"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Nitty Gritty Reader/Decoder</title>
+  <title>QR Nitty Gritty Reader/Decoder - https://jmegner.github.io/QrNittyGrittyReader/</title>
   <style>
     body {
       font-family: Arial, sans-serif;
       margin: 0;
-      padding: 1.5rem 0;
+      padding: 0.25rem 0;
       display: flex;
       flex-direction: column;
-      gap: 1.5rem;
+      gap: 1px;
       min-height: 100vh;
       box-sizing: border-box;
+    }
+
+    h1, h2 {
+      margin: 0 0 1px 0;
     }
 
     section {
       border: 1px solid #ccc;
       border-radius: 8px;
-      padding: 1rem 0 1rem 0.25rem;
+      padding: 0.25rem 0 0.25rem 0.25rem;
       width: 100%;
     }
 
@@ -99,7 +103,9 @@
 </head>
 <body>
   <h1>QR Nitty Gritty Reader</h1>
-  <a href="https://jmegner.github.io/QrNittyGrittyReader">live page</a>, <a href="https://github.com/jmegner/QrNittyGrittyReader">source repo</a>
+  <p style="margin: 0;">
+    <a href="https://jmegner.github.io/QrNittyGrittyReader">live page</a>, <a href="https://github.com/jmegner/QrNittyGrittyReader">source repo</a>
+  </p>
   <section>
     <h2>Upload an Image File</h2>
     <input id="image-input" type="file" accept="image/*">
@@ -116,14 +122,14 @@
     <h2>Capture from Camera</h2>
     <div id="camera-controls">
       <button id="start-camera-scan" type="button">Start Scan</button>
-      <button id="stop-camera" type="button" disabled>Stop Camera</button>
+      <button id="stop-camera" type="button" disabled="disabled">Stop Camera</button>
       <button id="start-camera" type="button">Start Manual</button>
-      <button id="capture-photo" type="button" disabled>Capture Photo</button>
+      <button id="capture-photo" type="button" disabled="disabled">Capture Photo</button>
       <button id="list-cameras" type="button">List Cameras</button>
     </div>
     <div id="camera-output">
-      <video id="camera-stream" autoplay playsinline hidden></video>
-      <canvas id="camera-canvas" width="640" height="480" hidden></canvas>
+      <video id="camera-stream" autoplay="autoplay" playsinline="" hidden=""></video>
+      <canvas id="camera-canvas" width="640" height="480" hidden=""></canvas>
       <pre id="camera-list" aria-live="polite"></pre>
     </div>
   </section>
@@ -143,12 +149,13 @@
     <pre id="qr-output-zxing" class="qr-output">No QR decoded yet.</pre>
   </section>
 
-  <script src="jsQR.js"></script>
+  <script src="QR%20Nitty%20Gritty%20Reader_Decoder%20-%20https___jmegner.github.io_QrNittyGrittyReader__files/jsQR.js"></script>
   <script>window.jsQROriginal = window.jsQR;</script>
-  <script src="zxing_v0-21-3.js"></script>
+  <script src="QR%20Nitty%20Gritty%20Reader_Decoder%20-%20https___jmegner.github.io_QrNittyGrittyReader__files/zxing_v0-21-3.js"></script>
   <script>window.ZXingLib = window.ZXing || null;</script>
-  <script src="jsQRNittyGritty.js"></script>
+  <script src="QR%20Nitty%20Gritty%20Reader_Decoder%20-%20https___jmegner.github.io_QrNittyGrittyReader__files/jsQRNittyGritty.js"></script>
   <script>window.jsQRNittyGritty = window.jsQR;</script>
-  <script src="app.js" defer></script>
-</body>
-</html>
+  <script src="QR%20Nitty%20Gritty%20Reader_Decoder%20-%20https___jmegner.github.io_QrNittyGrittyReader__files/app.js" defer="defer"></script>
+
+
+</body></html>
