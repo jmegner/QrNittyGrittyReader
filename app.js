@@ -371,7 +371,6 @@
     cameraCanvas.height = height;
     const context = cameraCanvas.getContext('2d');
     context.drawImage(cameraStreamEl, 0, 0, width, height);
-    cameraCanvas.hidden = false;
 
     const dataUrl = cameraCanvas.toDataURL('image/png');
     setPreviewFromDataUrl(dataUrl, 'Captured image', 'Camera');
