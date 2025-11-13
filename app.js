@@ -6,7 +6,6 @@
   const capturePhotoButton = document.getElementById('capture-photo');
   const stopCameraButton = document.getElementById('stop-camera');
   const startCameraScanButton = document.getElementById('start-camera-scan');
-  const stopCameraScanButton = document.getElementById('stop-camera-scan');
   const listCamerasButton = document.getElementById('list-cameras');
   const cameraStreamEl = document.getElementById('camera-stream');
   const cameraCanvas = document.getElementById('camera-canvas');
@@ -14,6 +13,8 @@
   const qrOutputOriginal = document.getElementById('qr-output-original');
   const qrOutputZXing = document.getElementById('qr-output-zxing');
   const cameraListEl = document.getElementById('camera-list');
+  const cameraSection = document.getElementById('camera-section');
+  const cameraControls = document.getElementById('camera-controls');
 
   let mediaStream = null;
   let scanning = false;
@@ -297,7 +298,6 @@
       cancelAnimationFrame(scanRafId);
       scanRafId = null;
     }
-    if (stopCameraScanButton) stopCameraScanButton.disabled = true;
     if (startCameraScanButton) startCameraScanButton.disabled = false;
   }
 
@@ -339,9 +339,21 @@
       capturePhotoButton.disabled = false;
       stopCameraButton.disabled = false;
       if (startCameraScanButton) startCameraScanButton.disabled = false;
-      if (stopCameraScanButton) stopCameraScanButton.disabled = true;
     } catch (error) {
       preview.textContent = 'Unable to access the camera.';
+    }
+  }
+
+  function scrollCameraControlsIntoView() {
+    const targetEl = cameraControls || cameraSection;
+    if (!targetEl) {
+      return;
+    }
+    try {
+      targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch {
+      const rect = targetEl.getBoundingClientRect();
+      window.scrollTo(0, window.scrollY + rect.top);
     }
   }
 
@@ -366,14 +378,17 @@
   }
 
   function setupCameraControls() {
-    startCameraButton.addEventListener('click', startCamera);
+    startCameraButton.addEventListener('click', () => {
+      scrollCameraControlsIntoView();
+      startCamera();
+    });
     capturePhotoButton.addEventListener('click', capturePhoto);
     stopCameraButton.addEventListener('click', stopCamera);
     if (startCameraScanButton) {
-      startCameraScanButton.addEventListener('click', startCameraScan);
-    }
-    if (stopCameraScanButton) {
-      stopCameraScanButton.addEventListener('click', stopCameraScan);
+      startCameraScanButton.addEventListener('click', () => {
+        scrollCameraControlsIntoView();
+        startCameraScan();
+      });
     }
     if (listCamerasButton) {
       listCamerasButton.addEventListener('click', listCameras);
@@ -618,25 +633,12 @@
       await ensureCameraReady();
       scanning = true;
       if (startCameraScanButton) startCameraScanButton.disabled = true;
-      if (stopCameraScanButton) stopCameraScanButton.disabled = false;
+      if (stopCameraButton) stopCameraButton.disabled = false;
       // While scanning, disable capture to reduce confusion
       capturePhotoButton.disabled = true;
       scanRafId = requestAnimationFrame(scanFrame);
     } catch (e) {
       preview.textContent = 'Unable to start camera scan.';
     }
-  }
-
-  function stopCameraScan() {
-    if (!scanning && !mediaStream) {
-      return;
-    }
-    scanning = false;
-    if (scanRafId) {
-      cancelAnimationFrame(scanRafId);
-      scanRafId = null;
-    }
-    // Per requirement, stopping scan stops the camera stream
-    stopCamera();
   }
 })();
