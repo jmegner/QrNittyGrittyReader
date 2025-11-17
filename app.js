@@ -13,6 +13,7 @@
   const qrOutputNG = document.getElementById('qr-output-ng');
   const qrOutputOriginal = document.getElementById('qr-output-original');
   const qrOutputZXing = document.getElementById('qr-output-zxing');
+  const toggleNgButton = document.getElementById('toggle-ng');
   const toggleOriginalButton = document.getElementById('toggle-original');
   const toggleZXingButton = document.getElementById('toggle-zxing');
   const cameraListEl = document.getElementById('camera-list');
@@ -488,6 +489,7 @@
   }
 
   function setupResultToggles() {
+    setupToggle(toggleNgButton, qrOutputNG, 'Nitty Gritty');
     setupToggle(toggleOriginalButton, qrOutputOriginal, 'Original');
     setupToggle(toggleZXingButton, qrOutputZXing, 'ZXing');
   }
