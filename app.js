@@ -13,6 +13,8 @@
   const qrOutputNG = document.getElementById('qr-output-ng');
   const qrOutputOriginal = document.getElementById('qr-output-original');
   const qrOutputZXing = document.getElementById('qr-output-zxing');
+  const toggleOriginalButton = document.getElementById('toggle-original');
+  const toggleZXingButton = document.getElementById('toggle-zxing');
   const cameraListEl = document.getElementById('camera-list');
   const cameraSection = document.getElementById('camera-section');
   const cameraControls = document.getElementById('camera-controls');
@@ -113,6 +115,23 @@
         qrOutputZXing.textContent = 'Unable to stringify ZXing result.';
       }
     }
+  }
+
+  function updateToggleLabel(button, isVisible, label) {
+    if (!button) { return; }
+    button.textContent = `${isVisible ? 'Hide' : 'Show'} ${label}`;
+  }
+
+  function setupToggle(button, target, label) {
+    if (!button || !target) { return; }
+    const setVisibility = (visible) => {
+      target.hidden = !visible;
+      updateToggleLabel(button, visible, label);
+    };
+    setVisibility(!target.hidden);
+    button.addEventListener('click', () => {
+      setVisibility(target.hidden);
+    });
   }
 
   function decodeFromCanvas(canvas) {
@@ -400,10 +419,16 @@
     }
   }
 
+  function setupResultToggles() {
+    setupToggle(toggleOriginalButton, qrOutputOriginal, 'Original');
+    setupToggle(toggleZXingButton, qrOutputZXing, 'ZXing');
+  }
+
   function init() {
     setupFileInput();
     setupDragAndDrop();
     setupCameraControls();
+    setupResultToggles();
   }
 
   document.addEventListener('DOMContentLoaded', init);

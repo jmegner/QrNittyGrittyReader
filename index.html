@@ -143,10 +143,16 @@
     <h2>QR Decode Result</h2>
     <h3>Nitty Gritty</h3>
     <pre id="qr-output-ng" class="qr-output">No QR decoded yet.</pre>
-    <h3>Original (jsQR.js)</h3>
-    <pre id="qr-output-original" class="qr-output">No QR decoded yet.</pre>
-    <h3>ZXing (v0.21.3)</h3>
-    <pre id="qr-output-zxing" class="qr-output">No QR decoded yet.</pre>
+    <h3>
+      Original (jsQR.js)
+      <button id="toggle-original" type="button">Show Original</button>
+    </h3>
+    <pre id="qr-output-original" class="qr-output" hidden>No QR decoded yet.</pre>
+    <h3>
+      ZXing (v0.21.3)
+      <button id="toggle-zxing" type="button">Show ZXing</button>
+    </h3>
+    <pre id="qr-output-zxing" class="qr-output" hidden>No QR decoded yet.</pre>
   </section>
 
   <script src="jsQR.js"></script>
