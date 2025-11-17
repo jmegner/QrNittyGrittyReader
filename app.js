@@ -94,27 +94,30 @@
   }
 
   function renderQrResults(ng, original, zxing) {
-    if (qrOutputNG) {
-      try {
-        qrOutputNG.textContent = ng ? JSON.stringify(ng, null, 2) : 'No QR code found in image.';
-      } catch {
-        qrOutputNG.textContent = 'Unable to stringify Nitty Gritty result.';
+    const renderInto = (el, obj, emptyMsg, errorMsg) => {
+      if (!el) return;
+      // Clear previous content
+      while (el.firstChild) el.removeChild(el.firstChild);
+      if (!obj) {
+        el.textContent = emptyMsg;
+        return;
       }
-    }
-    if (qrOutputOriginal) {
       try {
-        qrOutputOriginal.textContent = original ? JSON.stringify(original, null, 2) : 'No QR code found in image.';
+        if (window.renderjson) {
+          try { window.renderjson.set_show_to_level(1); } catch {}
+          const node = window.renderjson(obj);
+          el.appendChild(node);
+        } else {
+          el.textContent = JSON.stringify(obj, null, 2);
+        }
       } catch {
-        qrOutputOriginal.textContent = 'Unable to stringify Original result.';
+        el.textContent = errorMsg;
       }
-    }
-    if (qrOutputZXing) {
-      try {
-        qrOutputZXing.textContent = zxing ? JSON.stringify(zxing, null, 2) : 'No QR code found in image.';
-      } catch {
-        qrOutputZXing.textContent = 'Unable to stringify ZXing result.';
-      }
-    }
+    };
+
+    renderInto(qrOutputNG, ng, 'No QR code found in image.', 'Unable to render Nitty Gritty result.');
+    renderInto(qrOutputOriginal, original, 'No QR code found in image.', 'Unable to render Original result.');
+    renderInto(qrOutputZXing, zxing, 'No QR code found in image.', 'Unable to render ZXing result.');
   }
 
   function updateToggleLabel(button, isVisible, label) {
