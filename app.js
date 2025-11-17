@@ -18,6 +18,9 @@
   const cameraListEl = document.getElementById('camera-list');
   const cameraSection = document.getElementById('camera-section');
   const cameraControls = document.getElementById('camera-controls');
+  const copyNgBtn = document.getElementById('copy-ng');
+  const copyOriginalBtn = document.getElementById('copy-original');
+  const copyZxingBtn = document.getElementById('copy-zxing');
 
   let mediaStream = null;
   let scanning = false;
@@ -93,6 +96,8 @@
     reader.readAsDataURL(file);
   }
 
+  let lastResults = { ng: null, original: null, zxing: null };
+
   function renderQrResults(ng, original, zxing) {
     const renderInto = (el, obj, emptyMsg, errorMsg) => {
       if (!el) return;
@@ -118,6 +123,63 @@
     renderInto(qrOutputNG, ng, 'No QR code found in image.', 'Unable to render Nitty Gritty result.');
     renderInto(qrOutputOriginal, original, 'No QR code found in image.', 'Unable to render Original result.');
     renderInto(qrOutputZXing, zxing, 'No QR code found in image.', 'Unable to render ZXing result.');
+
+    // Remember raw objects for copy-to-clipboard
+    lastResults = { ng, original, zxing };
+  }
+
+  function prettyStringify(obj) {
+    try {
+      return JSON.stringify(obj, null, 2);
+    } catch (e) {
+      return '"[Unable to stringify JSON]"';
+    }
+  }
+
+  async function copyTextToClipboard(text) {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch {}
+    // Fallback
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+
+  function withCopyFeedback(btn, didCopy) {
+    if (!btn) return;
+    const original = btn.textContent;
+    btn.textContent = didCopy ? '✅' : '❌';
+    setTimeout(() => { btn.textContent = original; }, 900);
+  }
+
+  function setupCopyButtons() {
+    const hook = (btn, getter) => {
+      if (!btn) return;
+      btn.addEventListener('click', async () => {
+        const obj = getter();
+        const text = obj !== undefined ? prettyStringify(obj) : 'null';
+        const ok = await copyTextToClipboard(text);
+        withCopyFeedback(btn, ok);
+      });
+    };
+    hook(copyNgBtn, () => lastResults.ng);
+    hook(copyOriginalBtn, () => lastResults.original);
+    hook(copyZxingBtn, () => lastResults.zxing);
   }
 
   function updateToggleLabel(button, isVisible, label) {
@@ -432,6 +494,7 @@
     setupDragAndDrop();
     setupCameraControls();
     setupResultToggles();
+    setupCopyButtons();
   }
 
   document.addEventListener('DOMContentLoaded', init);
