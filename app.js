@@ -11,6 +11,7 @@
   const cameraStreamEl = document.getElementById('camera-stream');
   const cameraCanvas = document.getElementById('camera-canvas');
   const qrOutputNG = document.getElementById('qr-output-ng');
+  const ngBase64ListEl = document.getElementById('ng-base64-list');
   const qrOutputOriginal = document.getElementById('qr-output-original');
   const qrOutputZXing = document.getElementById('qr-output-zxing');
   const toggleNgButton = document.getElementById('toggle-ng');
@@ -131,6 +132,7 @@
     if (copyNgBtn) copyNgBtn.hidden = !ng;
     if (expandAllNgBtn) expandAllNgBtn.hidden = !ng;
     if (expand1NgBtn) expand1NgBtn.hidden = !ng;
+    updateNgBase64List(ng);
     renderInto(qrOutputOriginal, original, 'No QR code found in image.', 'Unable to render Original result.');
     if (copyOriginalBtn) copyOriginalBtn.hidden = !original;
     if (expandAllOriginalBtn) expandAllOriginalBtn.hidden = !original;
@@ -240,6 +242,132 @@
     hook(expand1OriginalBtn, 1, 'original');
     hook(expandAllZxingBtn, 'all', 'zxing');
     hook(expand1ZxingBtn, 1, 'zxing');
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function normalizeBase64(s) {
+    if (!s) return '';
+    let t = String(s).replace(/\s+/g, '');
+    t = t.replace(/-/g, '+').replace(/_/g, '/');
+    const mod = t.length % 4;
+    if (mod === 1) {
+      return t; // invalid length; atob will throw
+    }
+    if (mod > 0) {
+      t = t.padEnd(t.length + (4 - mod), '=');
+    }
+    return t;
+  }
+
+  function isDecodableBase64(s) {
+    try {
+      const normalized = normalizeBase64(s);
+      void atob(normalized);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function findBase64Substrings(str, minLen = 12) {
+    if (typeof str !== 'string' || !str) return [];
+    const re = new RegExp(`[A-Za-z0-9+/_-]{${minLen},}(?:==|=)?`, 'g');
+    const matches = str.match(re) || [];
+    // Validate and keep only decodable items
+    return matches.filter(isDecodableBase64);
+  }
+
+  function base64ToUtf8(b64) {
+    try {
+      const normalized = normalizeBase64(b64);
+      const bin = atob(normalized);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const td = new TextDecoder('utf-8', { fatal: false });
+      return td.decode(bytes);
+    } catch {
+      return null;
+    }
+  }
+
+  function updateNgBase64List(ng) {
+    if (!ngBase64ListEl) return;
+    try {
+      ngBase64ListEl.innerHTML = '';
+      if (!ng || typeof ng.data !== 'string') {
+        ngBase64ListEl.hidden = true;
+        return;
+      }
+      const items = findBase64Substrings(ng.data, 12);
+      if (!items.length) {
+        ngBase64ListEl.hidden = true;
+        return;
+      }
+      ngBase64ListEl.hidden = false;
+
+      const summary = document.createElement('div');
+      summary.textContent = `Base64 strings found (min length 12): ${items.length}`;
+      ngBase64ListEl.appendChild(summary);
+
+      items.forEach((b64, idx) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'b64-item';
+
+        const title = document.createElement('div');
+        title.textContent = `#${idx + 1}`;
+        wrap.appendChild(title);
+
+        const base64Line = document.createElement('div');
+        const base64Label = document.createElement('span');
+        base64Label.textContent = 'Base64: ';
+        const base64Text = document.createElement('span');
+        base64Text.textContent = b64;
+        base64Line.appendChild(base64Label);
+        base64Line.appendChild(base64Text);
+        wrap.appendChild(base64Line);
+
+        const decoded = base64ToUtf8(b64);
+        const block = document.createElement('div');
+        block.className = 'decoded-block';
+        const header = document.createElement('div');
+        header.className = 'decoded-header';
+        const strong = document.createElement('strong');
+        strong.textContent = 'Decoded';
+        header.appendChild(strong);
+        if (decoded !== null) {
+          const copyBtn = document.createElement('button');
+          copyBtn.type = 'button';
+          copyBtn.title = 'Copy decoded';
+          copyBtn.ariaLabel = 'Copy decoded';
+          copyBtn.textContent = '📋';
+          copyBtn.addEventListener('click', async () => {
+            const ok = await copyTextToClipboard(decoded);
+            withCopyFeedback(copyBtn, ok);
+          });
+          header.appendChild(copyBtn);
+        }
+        block.appendChild(header);
+
+        const decodedText = document.createElement('div');
+        decodedText.className = 'decoded-text';
+        decodedText.textContent = decoded !== null ? decoded : '[binary data]';
+        block.appendChild(decodedText);
+
+        wrap.appendChild(block);
+        ngBase64ListEl.appendChild(wrap);
+      });
+    } catch {
+      ngBase64ListEl.hidden = true;
+      ngBase64ListEl.textContent = '';
+    }
   }
 
   function updateToggleLabel(button, isVisible, label) {
