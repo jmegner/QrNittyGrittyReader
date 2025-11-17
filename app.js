@@ -203,6 +203,8 @@
     const setLevel = (val) => { try { window.renderjson.set_show_to_level(val); } catch {} };
     const doRender = (el, obj, emptyMsg, errMsg) => {
       if (!el) return;
+      // Ensure section is visible when expanding
+      el.hidden = false;
       while (el.firstChild) el.removeChild(el.firstChild);
       if (!obj) { el.textContent = emptyMsg; return; }
       try {
@@ -217,10 +219,13 @@
     };
     if (which === 'ng') {
       doRender(qrOutputNG, lastResults.ng, 'No QR code found in image.', 'Unable to render Nitty Gritty result.');
+      updateToggleLabel && updateToggleLabel(toggleNgButton, true, 'Nitty Gritty');
     } else if (which === 'original') {
       doRender(qrOutputOriginal, lastResults.original, 'No QR code found in image.', 'Unable to render Original result.');
+      updateToggleLabel && updateToggleLabel(toggleOriginalButton, true, 'Original');
     } else if (which === 'zxing') {
       doRender(qrOutputZXing, lastResults.zxing, 'No QR code found in image.', 'Unable to render ZXing result.');
+      updateToggleLabel && updateToggleLabel(toggleZXingButton, true, 'ZXing');
     }
   }
 
