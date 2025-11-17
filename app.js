@@ -121,8 +121,11 @@
     };
 
     renderInto(qrOutputNG, ng, 'No QR code found in image.', 'Unable to render Nitty Gritty result.');
+    if (copyNgBtn) copyNgBtn.hidden = !ng;
     renderInto(qrOutputOriginal, original, 'No QR code found in image.', 'Unable to render Original result.');
+    if (copyOriginalBtn) copyOriginalBtn.hidden = !original;
     renderInto(qrOutputZXing, zxing, 'No QR code found in image.', 'Unable to render ZXing result.');
+    if (copyZxingBtn) copyZxingBtn.hidden = !zxing;
 
     // Remember raw objects for copy-to-clipboard
     lastResults = { ng, original, zxing };
