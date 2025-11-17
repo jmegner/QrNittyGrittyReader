@@ -280,9 +280,15 @@
   function findBase64Substrings(str, minLen = 12) {
     if (typeof str !== 'string' || !str) return [];
     const re = new RegExp(`[A-Za-z0-9+/_-]{${minLen},}(?:==|=)?`, 'g');
-    const matches = str.match(re) || [];
-    // Validate and keep only decodable items
-    return matches.filter(isDecodableBase64);
+    const out = [];
+    let m;
+    while ((m = re.exec(str)) !== null) {
+      const b64 = m[0];
+      if (isDecodableBase64(b64)) {
+        out.push({ b64, index: m.index });
+      }
+    }
+    return out;
   }
 
   function base64ToUtf8(b64) {
@@ -317,13 +323,17 @@
       summary.textContent = `Base64 strings found (min length 12): ${items.length}`;
       ngBase64ListEl.appendChild(summary);
 
-      items.forEach((b64, idx) => {
+      items.forEach(({ b64, index }, idx) => {
         const wrap = document.createElement('div');
         wrap.className = 'b64-item';
 
         const title = document.createElement('div');
         title.textContent = `#${idx + 1}`;
         wrap.appendChild(title);
+
+        const meta = document.createElement('div');
+        meta.textContent = `Length: ${b64.length}, Offset: ${index}`;
+        wrap.appendChild(meta);
 
         const base64Line = document.createElement('div');
         const base64Label = document.createElement('span');
