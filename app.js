@@ -14,6 +14,9 @@
   const ngBase64ListEl = document.getElementById('ng-base64-list');
   const qrOutputOriginal = document.getElementById('qr-output-original');
   const qrOutputZXing = document.getElementById('qr-output-zxing');
+  const ngLinksEl = document.getElementById('ng-links');
+  const originalLinksEl = document.getElementById('original-links');
+  const zxingLinksEl = document.getElementById('zxing-links');
   const toggleNgButton = document.getElementById('toggle-ng');
   const toggleOriginalButton = document.getElementById('toggle-original');
   const toggleZXingButton = document.getElementById('toggle-zxing');
@@ -133,14 +136,20 @@
     if (expandAllNgBtn) expandAllNgBtn.hidden = !ng;
     if (expand1NgBtn) expand1NgBtn.hidden = !ng;
     updateNgBase64List(ng);
+    const ngLinkCount = updateLinksDisplay(ngLinksEl, ng && typeof ng.data === 'string' ? ng.data : '');
+    if (ngLinksEl) ngLinksEl.hidden = (ngLinkCount === 0) || !!qrOutputNG.hidden;
     renderInto(qrOutputOriginal, original, 'No QR code found in image.', 'Unable to render Original result.');
     if (copyOriginalBtn) copyOriginalBtn.hidden = !original;
     if (expandAllOriginalBtn) expandAllOriginalBtn.hidden = !original;
     if (expand1OriginalBtn) expand1OriginalBtn.hidden = !original;
+    const originalLinkCount = updateLinksDisplay(originalLinksEl, original && typeof original.data === 'string' ? original.data : '');
+    if (originalLinksEl) originalLinksEl.hidden = (originalLinkCount === 0) || !!qrOutputOriginal.hidden;
     renderInto(qrOutputZXing, zxing, 'No QR code found in image.', 'Unable to render ZXing result.');
     if (copyZxingBtn) copyZxingBtn.hidden = !zxing;
     if (expandAllZxingBtn) expandAllZxingBtn.hidden = !zxing;
     if (expand1ZxingBtn) expand1ZxingBtn.hidden = !zxing;
+    const zxingLinkCount = updateLinksDisplay(zxingLinksEl, zxing && typeof zxing.text === 'string' ? zxing.text : '');
+    if (zxingLinksEl) zxingLinksEl.hidden = (zxingLinkCount === 0) || !!qrOutputZXing.hidden;
 
     // Remember raw objects for copy-to-clipboard
     lastResults = { ng, original, zxing };
@@ -221,12 +230,16 @@
     };
     if (which === 'ng') {
       doRender(qrOutputNG, lastResults.ng, 'No QR code found in image.', 'Unable to render Nitty Gritty result.');
+      if (ngLinksEl && ngLinksEl.childNodes.length) ngLinksEl.hidden = false;
+      if (ngBase64ListEl && ngBase64ListEl.childNodes.length) ngBase64ListEl.hidden = false;
       updateToggleLabel && updateToggleLabel(toggleNgButton, true, 'Nitty Gritty');
     } else if (which === 'original') {
       doRender(qrOutputOriginal, lastResults.original, 'No QR code found in image.', 'Unable to render Original result.');
+      if (originalLinksEl && originalLinksEl.childNodes.length) originalLinksEl.hidden = false;
       updateToggleLabel && updateToggleLabel(toggleOriginalButton, true, 'Original');
     } else if (which === 'zxing') {
       doRender(qrOutputZXing, lastResults.zxing, 'No QR code found in image.', 'Unable to render ZXing result.');
+      if (zxingLinksEl && zxingLinksEl.childNodes.length) zxingLinksEl.hidden = false;
       updateToggleLabel && updateToggleLabel(toggleZXingButton, true, 'ZXing');
     }
   }
@@ -242,6 +255,49 @@
     hook(expand1OriginalBtn, 1, 'original');
     hook(expandAllZxingBtn, 'all', 'zxing');
     hook(expand1ZxingBtn, 1, 'zxing');
+  }
+
+  function extractLinks(text) {
+    if (typeof text !== 'string' || !text) return [];
+    const regex = /(https?:\/\/|www\.)[^\s<>'"()]+/gi;
+    const results = [];
+    let m;
+    while ((m = regex.exec(text)) !== null) {
+      let url = m[0];
+      url = url.replace(/[),.;!?]+$/g, '');
+      if (!url) continue;
+      const href = url.startsWith('www.') ? `https://${url}` : url;
+      if (!results.some(x => x.url === url)) {
+        results.push({ url, href });
+      }
+    }
+    return results;
+  }
+
+  function updateLinksDisplay(container, text) {
+    if (!container) return 0;
+    container.innerHTML = '';
+    const links = extractLinks(text);
+    if (!links.length) {
+      container.hidden = true;
+      return 0;
+    }
+    const header = document.createElement('div');
+    header.textContent = `Links found: ${links.length}`;
+    container.appendChild(header);
+    const list = document.createElement('ul');
+    links.forEach(({ url, href }) => {
+      const li = document.createElement('li');
+      const a = document.createElement('a');
+      a.href = href;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.textContent = url;
+      li.appendChild(a);
+      list.appendChild(li);
+    });
+    container.appendChild(list);
+    return links.length;
   }
 
   function escapeHtml(s) {
@@ -385,15 +441,18 @@
     button.textContent = `${isVisible ? 'Hide' : 'Show'} ${label}`;
   }
 
-  function setupToggle(button, target, label) {
-    if (!button || !target) { return; }
+  function setupToggle(button, targets, label) {
+    if (!button || !targets) { return; }
+    const list = Array.isArray(targets) ? targets.filter(Boolean) : [targets];
+    if (!list.length) return;
+    const anyVisible = () => list.some(el => !el.hidden);
     const setVisibility = (visible) => {
-      target.hidden = !visible;
+      list.forEach(el => { el.hidden = !visible; });
       updateToggleLabel(button, visible, label);
     };
-    setVisibility(!target.hidden);
+    setVisibility(anyVisible());
     button.addEventListener('click', () => {
-      setVisibility(target.hidden);
+      setVisibility(!anyVisible());
     });
   }
 
@@ -683,9 +742,9 @@
   }
 
   function setupResultToggles() {
-    setupToggle(toggleNgButton, qrOutputNG, 'Nitty Gritty');
-    setupToggle(toggleOriginalButton, qrOutputOriginal, 'Original');
-    setupToggle(toggleZXingButton, qrOutputZXing, 'ZXing');
+    setupToggle(toggleNgButton, [qrOutputNG, ngLinksEl, ngBase64ListEl], 'Nitty Gritty');
+    setupToggle(toggleOriginalButton, [qrOutputOriginal, originalLinksEl], 'Original');
+    setupToggle(toggleZXingButton, [qrOutputZXing, zxingLinksEl], 'ZXing');
   }
 
   function init() {
