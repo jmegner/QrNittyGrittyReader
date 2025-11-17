@@ -13,6 +13,8 @@
   const qrOutputNG = document.getElementById('qr-output-ng');
   const qrOutputOriginal = document.getElementById('qr-output-original');
   const qrOutputZXing = document.getElementById('qr-output-zxing');
+  const base64Output = document.getElementById('base64-output');
+  const base64UrlOutput = document.getElementById('base64url-output');
   const cameraListEl = document.getElementById('camera-list');
   const cameraSection = document.getElementById('camera-section');
   const cameraControls = document.getElementById('camera-controls');
@@ -22,6 +24,67 @@
   let scanRafId = null;
   let scanCanvas = null; // Offscreen canvas for scanning loop
   let cameraListDisplayToken = 0;
+
+  function normalizeAndPadBase64(candidate, type) {
+    const normalized = type === 'base64url'
+      ? candidate.replace(/-/g, '+').replace(/_/g, '/')
+      : candidate;
+    const mod = normalized.length % 4;
+    if (mod === 1) {
+      return null;
+    }
+    if (mod === 2) {
+      return `${normalized}==`;
+    }
+    if (mod === 3) {
+      return `${normalized}=`;
+    }
+    return normalized;
+  }
+
+  function decodeBase64Candidate(candidate, type) {
+    const padded = normalizeAndPadBase64(candidate, type);
+    if (!padded) { return null; }
+    try {
+      const decoded = atob(padded);
+      return { encoded: candidate, decoded };
+    } catch {
+      return null;
+    }
+  }
+
+  function findLargestBase64Segment(text, regex, type) {
+    const matches = text.match(regex) || [];
+    let largest = null;
+    matches.forEach(candidate => {
+      const decoded = decodeBase64Candidate(candidate, type);
+      if (decoded && (!largest || candidate.length > largest.encoded.length)) {
+        largest = decoded;
+      }
+    });
+    return largest;
+  }
+
+  function renderBase64Results(ngResult) {
+    if (!base64Output || !base64UrlOutput) { return; }
+
+    const dataText = ngResult && typeof ngResult.data === 'string' ? ngResult.data : '';
+    if (!dataText) {
+      base64Output.textContent = 'No data text available to search for base64.';
+      base64UrlOutput.textContent = 'No data text available to search for base64url.';
+      return;
+    }
+
+    const base64 = findLargestBase64Segment(dataText, /[A-Za-z0-9+/]+={0,2}/g, 'base64');
+    const base64url = findLargestBase64Segment(dataText, /[A-Za-z0-9_-]+={0,2}/g, 'base64url');
+
+    base64Output.textContent = base64
+      ? `Encoded: ${base64.encoded}\nDecoded: ${base64.decoded}`
+      : 'No valid base64 found in data text.';
+    base64UrlOutput.textContent = base64url
+      ? `Encoded: ${base64url.encoded}\nDecoded: ${base64url.decoded}`
+      : 'No valid base64url found in data text.';
+  }
 
   function setPreviewFromDataUrl(dataUrl, description, sourceLabel) {
     preview.innerHTML = '';
@@ -92,6 +155,7 @@
   }
 
   function renderQrResults(ng, original, zxing) {
+    renderBase64Results(ng);
     if (qrOutputNG) {
       try {
         qrOutputNG.textContent = ng ? JSON.stringify(ng, null, 2) : 'No QR code found in image.';
