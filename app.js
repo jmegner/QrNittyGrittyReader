@@ -22,6 +22,12 @@
   const copyNgBtn = document.getElementById('copy-ng');
   const copyOriginalBtn = document.getElementById('copy-original');
   const copyZxingBtn = document.getElementById('copy-zxing');
+  const expandAllNgBtn = document.getElementById('expand-all-ng');
+  const expand1NgBtn = document.getElementById('expand1-ng');
+  const expandAllOriginalBtn = document.getElementById('expand-all-original');
+  const expand1OriginalBtn = document.getElementById('expand1-original');
+  const expandAllZxingBtn = document.getElementById('expand-all-zxing');
+  const expand1ZxingBtn = document.getElementById('expand1-zxing');
 
   let mediaStream = null;
   let scanning = false;
@@ -123,10 +129,16 @@
 
     renderInto(qrOutputNG, ng, 'No QR code found in image.', 'Unable to render Nitty Gritty result.');
     if (copyNgBtn) copyNgBtn.hidden = !ng;
+    if (expandAllNgBtn) expandAllNgBtn.hidden = !ng;
+    if (expand1NgBtn) expand1NgBtn.hidden = !ng;
     renderInto(qrOutputOriginal, original, 'No QR code found in image.', 'Unable to render Original result.');
     if (copyOriginalBtn) copyOriginalBtn.hidden = !original;
+    if (expandAllOriginalBtn) expandAllOriginalBtn.hidden = !original;
+    if (expand1OriginalBtn) expand1OriginalBtn.hidden = !original;
     renderInto(qrOutputZXing, zxing, 'No QR code found in image.', 'Unable to render ZXing result.');
     if (copyZxingBtn) copyZxingBtn.hidden = !zxing;
+    if (expandAllZxingBtn) expandAllZxingBtn.hidden = !zxing;
+    if (expand1ZxingBtn) expand1ZxingBtn.hidden = !zxing;
 
     // Remember raw objects for copy-to-clipboard
     lastResults = { ng, original, zxing };
@@ -184,6 +196,45 @@
     hook(copyNgBtn, () => lastResults.ng);
     hook(copyOriginalBtn, () => lastResults.original);
     hook(copyZxingBtn, () => lastResults.zxing);
+  }
+
+  function rerenderSection(level, which) {
+    if (!window.renderjson) return;
+    const setLevel = (val) => { try { window.renderjson.set_show_to_level(val); } catch {} };
+    const doRender = (el, obj, emptyMsg, errMsg) => {
+      if (!el) return;
+      while (el.firstChild) el.removeChild(el.firstChild);
+      if (!obj) { el.textContent = emptyMsg; return; }
+      try {
+        setLevel(level);
+        el.appendChild(window.renderjson(obj));
+      } catch {
+        el.textContent = errMsg;
+      } finally {
+        // Reset default for general rendering
+        setLevel(1);
+      }
+    };
+    if (which === 'ng') {
+      doRender(qrOutputNG, lastResults.ng, 'No QR code found in image.', 'Unable to render Nitty Gritty result.');
+    } else if (which === 'original') {
+      doRender(qrOutputOriginal, lastResults.original, 'No QR code found in image.', 'Unable to render Original result.');
+    } else if (which === 'zxing') {
+      doRender(qrOutputZXing, lastResults.zxing, 'No QR code found in image.', 'Unable to render ZXing result.');
+    }
+  }
+
+  function setupExpandButtons() {
+    const hook = (btn, level, which) => {
+      if (!btn) return;
+      btn.addEventListener('click', () => rerenderSection(level, which));
+    };
+    hook(expandAllNgBtn, 'all', 'ng');
+    hook(expand1NgBtn, 1, 'ng');
+    hook(expandAllOriginalBtn, 'all', 'original');
+    hook(expand1OriginalBtn, 1, 'original');
+    hook(expandAllZxingBtn, 'all', 'zxing');
+    hook(expand1ZxingBtn, 1, 'zxing');
   }
 
   function updateToggleLabel(button, isVisible, label) {
@@ -500,6 +551,7 @@
     setupCameraControls();
     setupResultToggles();
     setupCopyButtons();
+    setupExpandButtons();
   }
 
   document.addEventListener('DOMContentLoaded', init);
