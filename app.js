@@ -398,7 +398,25 @@
       }
     });
 
-    return out.sort((a, b) => a.index - b.index);
+    const sorted = out.sort((a, b) => {
+      if (a.index === b.index) return b.b64.length - a.b64.length;
+      return a.index - b.index;
+    });
+
+    const filtered = [];
+    sorted.forEach((item) => {
+      const end = item.index + item.b64.length;
+      const overlaps = filtered.some(({ index, b64 }) => {
+        const prevEnd = index + b64.length;
+        return item.index < prevEnd && end > index;
+      });
+
+      if (!overlaps) {
+        filtered.push(item);
+      }
+    });
+
+    return filtered;
   }
 
   function safeDecodeUriComponent(value) {
