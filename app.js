@@ -314,12 +314,19 @@
           b64Items.forEach(({ b64 }, idx) => {
             const decoded = base64ToUtf8(b64);
             const item = document.createElement('li');
-            const label = document.createElement('strong');
-            label.textContent = `Base64url #${idx + 1}: `;
+
+            const label = document.createElement('div');
+            label.innerHTML = `<strong>Base64url #${idx + 1}</strong>`;
             item.appendChild(label);
-            const text = document.createElement('span');
-            text.textContent = decoded !== null ? decoded : '[binary data]';
-            item.appendChild(text);
+
+            const original = document.createElement('div');
+            original.textContent = `Original: ${b64}`;
+            item.appendChild(original);
+
+            const decodedText = document.createElement('div');
+            decodedText.textContent = `Decoded: ${decoded !== null ? decoded : '[binary data]'}`;
+            item.appendChild(decodedText);
+
             decodedList.appendChild(item);
           });
 
