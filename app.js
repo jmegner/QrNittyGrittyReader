@@ -380,12 +380,12 @@
   function findBase64Substrings(str, minLen = 12, variant = 'either') {
     if (typeof str !== 'string' || !str) return [];
 
-    const buildRe = (alphabet) => new RegExp(`[${alphabet}]{${minLen},}(?:==|=)?`, 'g');
+    const buildRe = (alphabet, allowPadding) => new RegExp(`[${alphabet}]{${minLen},}${allowPadding ? '(?:==|=)?' : ''}`, 'g');
     const variants = variant === 'standard'
-      ? [buildRe('A-Za-z0-9+/')]
+      ? [buildRe('A-Za-z0-9+/', true)]
       : variant === 'url'
-        ? [buildRe('A-Za-z0-9_-')]
-        : [buildRe('A-Za-z0-9+/'), buildRe('A-Za-z0-9_-')];
+        ? [buildRe('A-Za-z0-9_-', false)]
+        : [buildRe('A-Za-z0-9+/', true), buildRe('A-Za-z0-9_-', false)];
 
     const out = [];
     variants.forEach((re) => {
