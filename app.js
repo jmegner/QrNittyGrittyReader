@@ -305,7 +305,8 @@
       })();
 
       if (postDomain) {
-        const b64Items = findBase64Substrings(postDomain, 12, 'url');
+        const decodedPostDomain = safeDecodeUriComponent(postDomain);
+        const b64Items = findBase64Substrings(decodedPostDomain, 12, 'url');
         if (b64Items.length) {
           const decodedList = document.createElement('ul');
           decodedList.style.marginTop = '4px';
@@ -398,6 +399,15 @@
     });
 
     return out.sort((a, b) => a.index - b.index);
+  }
+
+  function safeDecodeUriComponent(value) {
+    if (typeof value !== 'string' || !value) return value || '';
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
   }
 
   function base64ToUtf8(b64) {
