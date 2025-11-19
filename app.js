@@ -294,6 +294,42 @@
       a.rel = 'noopener noreferrer';
       a.textContent = url;
       li.appendChild(a);
+
+      const postDomain = (() => {
+        try {
+          const parsed = new URL(href);
+          return `${parsed.pathname || ''}${parsed.search || ''}${parsed.hash || ''}`;
+        } catch {
+          return '';
+        }
+      })();
+
+      if (postDomain) {
+        const b64Items = findBase64Substrings(postDomain, 12);
+        if (b64Items.length) {
+          const decodedList = document.createElement('ul');
+          decodedList.style.marginTop = '4px';
+          decodedList.style.marginBottom = '0';
+
+          b64Items.forEach(({ b64 }, idx) => {
+            const decoded = base64ToUtf8(b64);
+            const item = document.createElement('li');
+            const label = document.createElement('strong');
+            label.textContent = `Base64url #${idx + 1}: `;
+            item.appendChild(label);
+            const text = document.createElement('span');
+            text.textContent = decoded !== null ? decoded : '[binary data]';
+            item.appendChild(text);
+            decodedList.appendChild(item);
+          });
+
+          const decodedHeader = document.createElement('div');
+          decodedHeader.textContent = `Base64url strings in link: ${b64Items.length}`;
+          li.appendChild(decodedHeader);
+          li.appendChild(decodedList);
+        }
+      }
+
       list.appendChild(li);
     });
     container.appendChild(list);
