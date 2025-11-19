@@ -305,7 +305,7 @@
       })();
 
       if (postDomain) {
-        const b64Items = findBase64Substrings(postDomain, 12);
+        const b64Items = findBase64Substrings(postDomain, 12, 'url');
         if (b64Items.length) {
           const decodedList = document.createElement('ul');
           decodedList.style.marginTop = '4px';
@@ -376,18 +376,28 @@
     }
   }
 
-  function findBase64Substrings(str, minLen = 12) {
+  function findBase64Substrings(str, minLen = 12, variant = 'either') {
     if (typeof str !== 'string' || !str) return [];
-    const re = new RegExp(`[A-Za-z0-9+/_-]{${minLen},}(?:==|=)?`, 'g');
+
+    const buildRe = (alphabet) => new RegExp(`[${alphabet}]{${minLen},}(?:==|=)?`, 'g');
+    const variants = variant === 'standard'
+      ? [buildRe('A-Za-z0-9+/')]
+      : variant === 'url'
+        ? [buildRe('A-Za-z0-9_-')]
+        : [buildRe('A-Za-z0-9+/'), buildRe('A-Za-z0-9_-')];
+
     const out = [];
-    let m;
-    while ((m = re.exec(str)) !== null) {
-      const b64 = m[0];
-      if (isDecodableBase64(b64)) {
-        out.push({ b64, index: m.index });
+    variants.forEach((re) => {
+      let m;
+      while ((m = re.exec(str)) !== null) {
+        const b64 = m[0];
+        if (isDecodableBase64(b64)) {
+          out.push({ b64, index: m.index });
+        }
       }
-    }
-    return out;
+    });
+
+    return out.sort((a, b) => a.index - b.index);
   }
 
   function base64ToUtf8(b64) {
