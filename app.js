@@ -294,6 +294,31 @@
       a.rel = 'noopener noreferrer';
       a.textContent = url;
       li.appendChild(a);
+
+      const base64Segments = findLinkBase64Segments(href, 12);
+      if (base64Segments.length) {
+        const b64Wrap = document.createElement('div');
+        b64Wrap.className = 'link-b64-wrap';
+
+        const b64Header = document.createElement('div');
+        b64Header.textContent = `Base64URL strings found: ${base64Segments.length}`;
+        b64Wrap.appendChild(b64Header);
+
+        const b64List = document.createElement('ul');
+        base64Segments.forEach(({ b64, decoded }, idx) => {
+          const b64Item = document.createElement('li');
+
+          const b64Line = document.createElement('div');
+          b64Line.textContent = `#${idx + 1} (${b64.length} chars): ${b64}`;
+          b64Item.appendChild(b64Line);
+
+          b64Item.appendChild(createDecodedBlock(decoded));
+          b64List.appendChild(b64Item);
+        });
+
+        b64Wrap.appendChild(b64List);
+        li.appendChild(b64Wrap);
+      }
       list.appendChild(li);
     });
     container.appendChild(list);
@@ -360,6 +385,36 @@
     }
   }
 
+  function createDecodedBlock(decoded) {
+    const block = document.createElement('div');
+    block.className = 'decoded-block';
+    const header = document.createElement('div');
+    header.className = 'decoded-header';
+    const strong = document.createElement('strong');
+    strong.textContent = 'Decoded';
+    header.appendChild(strong);
+    if (decoded !== null) {
+      const copyBtn = document.createElement('button');
+      copyBtn.type = 'button';
+      copyBtn.title = 'Copy decoded';
+      copyBtn.ariaLabel = 'Copy decoded';
+      copyBtn.textContent = '📋';
+      copyBtn.addEventListener('click', async () => {
+        const ok = await copyTextToClipboard(decoded);
+        withCopyFeedback(copyBtn, ok);
+      });
+      header.appendChild(copyBtn);
+    }
+    block.appendChild(header);
+
+    const decodedText = document.createElement('div');
+    decodedText.className = 'decoded-text';
+    decodedText.textContent = decoded !== null ? decoded : '[binary data]';
+    block.appendChild(decodedText);
+
+    return block;
+  }
+
   function updateNgBase64List(ng) {
     if (!ngBase64ListEl) return;
     try {
@@ -401,39 +456,32 @@
         wrap.appendChild(base64Line);
 
         const decoded = base64ToUtf8(b64);
-        const block = document.createElement('div');
-        block.className = 'decoded-block';
-        const header = document.createElement('div');
-        header.className = 'decoded-header';
-        const strong = document.createElement('strong');
-        strong.textContent = 'Decoded';
-        header.appendChild(strong);
-        if (decoded !== null) {
-          const copyBtn = document.createElement('button');
-          copyBtn.type = 'button';
-          copyBtn.title = 'Copy decoded';
-          copyBtn.ariaLabel = 'Copy decoded';
-          copyBtn.textContent = '📋';
-          copyBtn.addEventListener('click', async () => {
-            const ok = await copyTextToClipboard(decoded);
-            withCopyFeedback(copyBtn, ok);
-          });
-          header.appendChild(copyBtn);
-        }
-        block.appendChild(header);
-
-        const decodedText = document.createElement('div');
-        decodedText.className = 'decoded-text';
-        decodedText.textContent = decoded !== null ? decoded : '[binary data]';
-        block.appendChild(decodedText);
-
-        wrap.appendChild(block);
+        wrap.appendChild(createDecodedBlock(decoded));
         ngBase64ListEl.appendChild(wrap);
       });
     } catch {
       ngBase64ListEl.hidden = true;
       ngBase64ListEl.textContent = '';
     }
+  }
+
+  function getPostDomainText(href) {
+    try {
+      const u = new URL(href);
+      return `${u.pathname || ''}${u.search || ''}${u.hash || ''}`;
+    } catch {
+      return '';
+    }
+  }
+
+  function findLinkBase64Segments(href, minLen = 12) {
+    const postDomain = getPostDomainText(href);
+    if (!postDomain) return [];
+    return findBase64Substrings(postDomain, minLen).map(({ b64, index }) => ({
+      b64,
+      index,
+      decoded: base64ToUtf8(b64),
+    }));
   }
 
   function updateToggleLabel(button, isVisible, label) {
