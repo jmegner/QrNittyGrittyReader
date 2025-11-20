@@ -259,7 +259,7 @@
 
   function extractLinks(text) {
     if (typeof text !== 'string' || !text) return [];
-    const regex = /(https?:\/\/|www\.)[^\s<>'"()]+/gi;
+    const regex = /\b(?:[a-z][a-z0-9+.-]*:\/\/|[a-z][a-z0-9+.-]*:|www\.)[^\s<>'"()]+/gi;
     const results = [];
     let m;
     while ((m = regex.exec(text)) !== null) {
@@ -294,6 +294,13 @@
       a.rel = 'noopener noreferrer';
       a.textContent = url;
       li.appendChild(a);
+
+      if (/%[0-9a-fA-F]{2}/.test(url)) {
+        const decodedUrl = safeDecodeUri(url);
+        const decodedDisplay = document.createElement('div');
+        decodedDisplay.textContent = `Percent-decoded: ${decodedUrl}`;
+        li.appendChild(decodedDisplay);
+      }
 
       const postDomain = (() => {
         try {
@@ -423,6 +430,15 @@
     if (typeof value !== 'string' || !value) return value || '';
     try {
       return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
+  }
+
+  function safeDecodeUri(value) {
+    if (typeof value !== 'string' || !value) return value || '';
+    try {
+      return decodeURI(value);
     } catch {
       return value;
     }
