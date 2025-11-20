@@ -839,6 +839,11 @@
     }
   }
 
+  function waitForCameraLayout() {
+    // Allow the camera elements to enter the layout before scrolling
+    return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  }
+
   function capturePhoto() {
     if (!mediaStream) {
       preview.textContent = 'Start the camera before capturing a photo.';
@@ -863,16 +868,18 @@
   }
 
   function setupCameraControls() {
-    startCameraButton.addEventListener('click', () => {
+    startCameraButton.addEventListener('click', async () => {
+      await startCamera();
+      await waitForCameraLayout();
       scrollCameraControlsIntoView();
-      startCamera();
     });
     capturePhotoButton.addEventListener('click', capturePhoto);
     stopCameraButton.addEventListener('click', stopCamera);
     if (startCameraScanButton) {
-      startCameraScanButton.addEventListener('click', () => {
+      startCameraScanButton.addEventListener('click', async () => {
+        await startCameraScan();
+        await waitForCameraLayout();
         scrollCameraControlsIntoView();
-        startCameraScan();
       });
     }
     if (listCamerasButton) {
