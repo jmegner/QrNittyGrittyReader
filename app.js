@@ -259,7 +259,7 @@
 
   function extractLinks(text) {
     if (typeof text !== 'string' || !text) return [];
-    const regex = /(https?:\/\/|www\.)[^\s<>'"()]+/gi;
+    const regex = /\b(?:[a-z][a-z0-9+.-]*:\/\/|[a-z][a-z0-9+.-]*:|www\.)[^\s<>'"()]+/gi;
     const results = [];
     let m;
     while ((m = regex.exec(text)) !== null) {
@@ -294,6 +294,57 @@
       a.rel = 'noopener noreferrer';
       a.textContent = url;
       li.appendChild(a);
+
+      if (/%[0-9a-fA-F]{2}/.test(url)) {
+        const decodedUrl = safeDecodeUri(url);
+        const decodedDisplay = document.createElement('div');
+        decodedDisplay.textContent = `Percent-decoded: ${decodedUrl}`;
+        li.appendChild(decodedDisplay);
+      }
+
+      const postDomain = (() => {
+        try {
+          const parsed = new URL(href);
+          return `${parsed.pathname || ''}${parsed.search || ''}${parsed.hash || ''}`;
+        } catch {
+          return '';
+        }
+      })();
+
+      if (postDomain) {
+        const decodedPostDomain = safeDecodeUriComponent(postDomain);
+        const b64Items = findBase64Substrings(decodedPostDomain, 12, 'url');
+        if (b64Items.length) {
+          const decodedList = document.createElement('ul');
+          decodedList.style.marginTop = '4px';
+          decodedList.style.marginBottom = '0';
+
+          b64Items.forEach(({ b64 }, idx) => {
+            const decoded = base64ToUtf8(b64);
+            const item = document.createElement('li');
+
+            const label = document.createElement('div');
+            label.innerHTML = `<strong>Base64url #${idx + 1}</strong>`;
+            item.appendChild(label);
+
+            const original = document.createElement('div');
+            original.textContent = `Original: ${b64}`;
+            item.appendChild(original);
+
+            const decodedText = document.createElement('div');
+            decodedText.textContent = `Decoded: ${decoded !== null ? decoded : '[binary data]'}`;
+            item.appendChild(decodedText);
+
+            decodedList.appendChild(item);
+          });
+
+          const decodedHeader = document.createElement('div');
+          decodedHeader.textContent = `Base64url strings in link: ${b64Items.length}`;
+          li.appendChild(decodedHeader);
+          li.appendChild(decodedList);
+        }
+      }
+
       list.appendChild(li);
     });
     container.appendChild(list);
@@ -333,18 +384,64 @@
     }
   }
 
-  function findBase64Substrings(str, minLen = 12) {
+  function findBase64Substrings(str, minLen = 12, variant = 'either') {
     if (typeof str !== 'string' || !str) return [];
-    const re = new RegExp(`[A-Za-z0-9+/_-]{${minLen},}(?:==|=)?`, 'g');
+
+    const buildRe = (alphabet, allowPadding) => new RegExp(`[${alphabet}]{${minLen},}${allowPadding ? '(?:==|=)?' : ''}`, 'g');
+    const variants = variant === 'standard'
+      ? [buildRe('A-Za-z0-9+/', true)]
+      : variant === 'url'
+        ? [buildRe('A-Za-z0-9_-', false)]
+        : [buildRe('A-Za-z0-9+/', true), buildRe('A-Za-z0-9_-', false)];
+
     const out = [];
-    let m;
-    while ((m = re.exec(str)) !== null) {
-      const b64 = m[0];
-      if (isDecodableBase64(b64)) {
-        out.push({ b64, index: m.index });
+    variants.forEach((re) => {
+      let m;
+      while ((m = re.exec(str)) !== null) {
+        const b64 = m[0];
+        if (isDecodableBase64(b64)) {
+          out.push({ b64, index: m.index });
+        }
       }
+    });
+
+    const sorted = out.sort((a, b) => {
+      if (a.index === b.index) return b.b64.length - a.b64.length;
+      return a.index - b.index;
+    });
+
+    const filtered = [];
+    sorted.forEach((item) => {
+      const end = item.index + item.b64.length;
+      const overlaps = filtered.some(({ index, b64 }) => {
+        const prevEnd = index + b64.length;
+        return item.index < prevEnd && end > index;
+      });
+
+      if (!overlaps) {
+        filtered.push(item);
+      }
+    });
+
+    return filtered;
+  }
+
+  function safeDecodeUriComponent(value) {
+    if (typeof value !== 'string' || !value) return value || '';
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
     }
-    return out;
+  }
+
+  function safeDecodeUri(value) {
+    if (typeof value !== 'string' || !value) return value || '';
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
   }
 
   function base64ToUtf8(b64) {
