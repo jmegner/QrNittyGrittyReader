@@ -438,7 +438,7 @@
   function safeDecodeUri(value) {
     if (typeof value !== 'string' || !value) return value || '';
     try {
-      return decodeURI(value);
+      return decodeURIComponent(value);
     } catch {
       return value;
     }
