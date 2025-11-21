@@ -589,11 +589,27 @@
 
   function findUuidMatches(text) {
     if (typeof text !== 'string' || !text) return [];
-    const re = /\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}\b/g;
+    const re = /\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b/g;
     const matches = [];
     let m;
+
+    const describeVariant = (variantChar) => {
+      const n = parseInt(variantChar, 16);
+      if (Number.isNaN(n)) return 'Unknown';
+      if (n <= 7) return 'Variant 0 (NCS/reserved)';
+      if (n <= 0xb) return 'Variant 1 (RFC 4122)';
+      if (n <= 0xd) return 'Variant 2 (Microsoft)';
+      return 'Variant 3 (future/reserved)';
+    };
+
     while ((m = re.exec(text)) !== null) {
-      matches.push(m[0]);
+      const uuid = m[0];
+      const versionNibble = uuid[14];
+      const version = /[0-9a-fA-F]/.test(versionNibble)
+        ? parseInt(versionNibble, 16)
+        : null;
+      const variant = describeVariant(uuid[19]);
+      matches.push({ uuid, version, variant });
     }
     return matches;
   }
@@ -608,25 +624,25 @@
       }
 
       const collected = [];
-      findUuidMatches(ng.data).forEach(uuid => collected.push({ uuid, source: 'Original data text' }));
+      findUuidMatches(ng.data).forEach(match => collected.push({ ...match, source: 'Original data text' }));
 
       decodedBase64Entries.forEach((entry, idx) => {
         const source = (entry && entry.source) || `Decoded base64 #${idx + 1}`;
-        findUuidMatches(entry && entry.decoded).forEach(uuid => collected.push({ uuid, source }));
+        findUuidMatches(entry && entry.decoded).forEach(match => collected.push({ ...match, source }));
       });
 
       decodedBase64UrlEntries.forEach((entry, idx) => {
         const source = (entry && entry.source) || `Decoded base64url #${idx + 1}`;
-        findUuidMatches(entry && entry.decoded).forEach(uuid => collected.push({ uuid, source }));
+        findUuidMatches(entry && entry.decoded).forEach(match => collected.push({ ...match, source }));
       });
 
       const seen = new Set();
       const unique = [];
-      collected.forEach(({ uuid, source }) => {
+      collected.forEach(({ uuid, source, version, variant }) => {
         const key = `${uuid}__${source}`;
         if (seen.has(key)) return;
         seen.add(key);
-        unique.push({ uuid, source });
+        unique.push({ uuid, source, version, variant });
       });
 
       if (!unique.length) {
@@ -639,9 +655,11 @@
       ngUuidListEl.appendChild(header);
 
       const list = document.createElement('ul');
-      unique.forEach(({ uuid, source }) => {
+      unique.forEach(({ uuid, source, version, variant }) => {
         const li = document.createElement('li');
-        li.textContent = `${uuid} (${source})`;
+        const versionLabel = Number.isInteger(version) ? `Version ${version}` : 'Version unknown';
+        const variantLabel = variant || 'Variant unknown';
+        li.textContent = `${uuid} — ${versionLabel}; ${variantLabel} (${source})`;
         list.appendChild(li);
       });
 
