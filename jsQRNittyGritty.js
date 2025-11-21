@@ -884,16 +884,29 @@ function decodeMatrix(matrix) {
                 chunk.affectedByErrorCorrection = affected;
             });
         }
-        // Attach padding bytes sampled before Reed-Solomon correction
+        // Attach padding bytes sampled before and after Reed-Solomon correction
         if (decodedData && decodedData.padding) {
             var padIndex = typeof decodedData.padding.padByteStartIndex === 'number'
                 ? decodedData.padding.padByteStartIndex
                 : preResultBytes.length;
             var beforeCorrection = [];
+            var afterCorrection = [];
             for (var i = padIndex; i < preResultBytes.length; i++) {
                 beforeCorrection.push(preResultBytes[i]);
             }
-            decodedData.padding.paddingBytesBeforeCorrection = beforeCorrection;
+            for (var i = padIndex; i < resultBytes.length; i++) {
+                afterCorrection.push(resultBytes[i]);
+            }
+            if (correctionsApplied > 0) {
+                decodedData.padding.paddingBytesBeforeCorrection = beforeCorrection;
+                decodedData.padding.paddingBytesAfterCorrection = afterCorrection;
+                delete decodedData.padding.paddingBytes;
+            }
+            else {
+                decodedData.padding.paddingBytes = afterCorrection;
+                delete decodedData.padding.paddingBytesBeforeCorrection;
+                delete decodedData.padding.paddingBytesAfterCorrection;
+            }
             delete decodedData.padding.padByteStartIndex;
         }
         // Attach nitty-gritty details from format and structure
@@ -1304,6 +1317,8 @@ function calculatePaddingInfo(startBit, terminatorBits, totalBits, totalBytes) {
         numPaddingBits: padBits,
         numPaddingBytes: padBytes,
         paddingBytesBeforeCorrection: [],
+        paddingBytesAfterCorrection: [],
+        paddingBytes: [],
         padByteStartIndex: padByteStartIndex,
     };
 }
