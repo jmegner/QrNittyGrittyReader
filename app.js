@@ -12,6 +12,7 @@
   const cameraCanvas = document.getElementById('camera-canvas');
   const qrOutputNG = document.getElementById('qr-output-ng');
   const ngBase64ListEl = document.getElementById('ng-base64-list');
+  const ngUuidListEl = document.getElementById('ng-uuids');
   const qrOutputOriginal = document.getElementById('qr-output-original');
   const qrOutputZXing = document.getElementById('qr-output-zxing');
   const ngLinksEl = document.getElementById('ng-links');
@@ -135,20 +136,21 @@
     if (copyNgBtn) copyNgBtn.hidden = !ng;
     if (expandAllNgBtn) expandAllNgBtn.hidden = !ng;
     if (expand1NgBtn) expand1NgBtn.hidden = !ng;
-    updateNgBase64List(ng);
-    const ngLinkCount = updateLinksDisplay(ngLinksEl, ng && typeof ng.data === 'string' ? ng.data : '');
+    const decodedBase64Entries = updateNgBase64List(ng);
+    const { count: ngLinkCount, decodedBase64Urls } = updateLinksDisplay(ngLinksEl, ng && typeof ng.data === 'string' ? ng.data : '');
+    updateNgUuidList(ng, decodedBase64Entries, decodedBase64Urls);
     if (ngLinksEl) ngLinksEl.hidden = (ngLinkCount === 0) || !!qrOutputNG.hidden;
     renderInto(qrOutputOriginal, original, 'No QR code found in image.', 'Unable to render Original result.');
     if (copyOriginalBtn) copyOriginalBtn.hidden = !original;
     if (expandAllOriginalBtn) expandAllOriginalBtn.hidden = !original;
     if (expand1OriginalBtn) expand1OriginalBtn.hidden = !original;
-    const originalLinkCount = updateLinksDisplay(originalLinksEl, original && typeof original.data === 'string' ? original.data : '');
+    const { count: originalLinkCount } = updateLinksDisplay(originalLinksEl, original && typeof original.data === 'string' ? original.data : '');
     if (originalLinksEl) originalLinksEl.hidden = (originalLinkCount === 0) || !!qrOutputOriginal.hidden;
     renderInto(qrOutputZXing, zxing, 'No QR code found in image.', 'Unable to render ZXing result.');
     if (copyZxingBtn) copyZxingBtn.hidden = !zxing;
     if (expandAllZxingBtn) expandAllZxingBtn.hidden = !zxing;
     if (expand1ZxingBtn) expand1ZxingBtn.hidden = !zxing;
-    const zxingLinkCount = updateLinksDisplay(zxingLinksEl, zxing && typeof zxing.text === 'string' ? zxing.text : '');
+    const { count: zxingLinkCount } = updateLinksDisplay(zxingLinksEl, zxing && typeof zxing.text === 'string' ? zxing.text : '');
     if (zxingLinksEl) zxingLinksEl.hidden = (zxingLinkCount === 0) || !!qrOutputZXing.hidden;
 
     // Remember raw objects for copy-to-clipboard
@@ -275,12 +277,13 @@
   }
 
   function updateLinksDisplay(container, text) {
-    if (!container) return 0;
+    const decodedBase64Urls = [];
+    if (!container) return { count: 0, decodedBase64Urls };
     container.innerHTML = '';
     const links = extractLinks(text);
     if (!links.length) {
       container.hidden = true;
-      return 0;
+      return { count: 0, decodedBase64Urls };
     }
     const header = document.createElement('div');
     header.textContent = `Links found: ${links.length}`;
@@ -321,6 +324,9 @@
 
           b64Items.forEach(({ b64 }, idx) => {
             const decoded = base64ToUtf8(b64);
+            if (decoded !== null) {
+              decodedBase64Urls.push({ decoded, source: `Link ${url} base64url #${idx + 1}` });
+            }
             const item = document.createElement('li');
 
             const label = document.createElement('div');
@@ -348,7 +354,7 @@
       list.appendChild(li);
     });
     container.appendChild(list);
-    return links.length;
+    return { count: links.length, decodedBase64Urls };
   }
 
   function escapeHtml(s) {
@@ -500,17 +506,18 @@
   }
 
   function updateNgBase64List(ng) {
-    if (!ngBase64ListEl) return;
+    if (!ngBase64ListEl) return [];
+    const decodedEntries = [];
     try {
       ngBase64ListEl.innerHTML = '';
       if (!ng || typeof ng.data !== 'string') {
         ngBase64ListEl.hidden = true;
-        return;
+        return decodedEntries;
       }
       const items = findBase64Substrings(ng.data, 12);
       if (!items.length) {
         ngBase64ListEl.hidden = true;
-        return;
+        return decodedEntries;
       }
       ngBase64ListEl.hidden = false;
 
@@ -540,6 +547,9 @@
         wrap.appendChild(base64Line);
 
         const decoded = base64ToUtf8(b64);
+        if (decoded !== null) {
+          decodedEntries.push({ decoded, source: `Decoded base64 #${idx + 1} (offset ${index})` });
+        }
         const block = document.createElement('div');
         block.className = 'decoded-block';
         const header = document.createElement('div');
@@ -569,9 +579,77 @@
         wrap.appendChild(block);
         ngBase64ListEl.appendChild(wrap);
       });
+      return decodedEntries;
     } catch {
       ngBase64ListEl.hidden = true;
       ngBase64ListEl.textContent = '';
+      return decodedEntries;
+    }
+  }
+
+  function findUuidMatches(text) {
+    if (typeof text !== 'string' || !text) return [];
+    const re = /\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}\b/g;
+    const matches = [];
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      matches.push(m[0]);
+    }
+    return matches;
+  }
+
+  function updateNgUuidList(ng, decodedBase64Entries = [], decodedBase64UrlEntries = []) {
+    if (!ngUuidListEl) return;
+    try {
+      ngUuidListEl.innerHTML = '';
+      if (!ng || typeof ng.data !== 'string') {
+        ngUuidListEl.hidden = true;
+        return;
+      }
+
+      const collected = [];
+      findUuidMatches(ng.data).forEach(uuid => collected.push({ uuid, source: 'Original data text' }));
+
+      decodedBase64Entries.forEach((entry, idx) => {
+        const source = (entry && entry.source) || `Decoded base64 #${idx + 1}`;
+        findUuidMatches(entry && entry.decoded).forEach(uuid => collected.push({ uuid, source }));
+      });
+
+      decodedBase64UrlEntries.forEach((entry, idx) => {
+        const source = (entry && entry.source) || `Decoded base64url #${idx + 1}`;
+        findUuidMatches(entry && entry.decoded).forEach(uuid => collected.push({ uuid, source }));
+      });
+
+      const seen = new Set();
+      const unique = [];
+      collected.forEach(({ uuid, source }) => {
+        const key = `${uuid}__${source}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        unique.push({ uuid, source });
+      });
+
+      if (!unique.length) {
+        ngUuidListEl.hidden = true;
+        return;
+      }
+
+      const header = document.createElement('div');
+      header.textContent = `UUIDs found: ${unique.length}`;
+      ngUuidListEl.appendChild(header);
+
+      const list = document.createElement('ul');
+      unique.forEach(({ uuid, source }) => {
+        const li = document.createElement('li');
+        li.textContent = `${uuid} (${source})`;
+        list.appendChild(li);
+      });
+
+      ngUuidListEl.appendChild(list);
+      ngUuidListEl.hidden = false;
+    } catch {
+      ngUuidListEl.hidden = true;
+      ngUuidListEl.textContent = '';
     }
   }
 
