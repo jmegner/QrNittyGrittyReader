@@ -897,16 +897,23 @@ function decodeMatrix(matrix) {
             for (var i = padIndex; i < resultBytes.length; i++) {
                 afterCorrection.push(resultBytes[i]);
             }
+            var existingPadding = decodedData.padding;
+            var normalizedPadding = {};
+            Object.keys(existingPadding).forEach(function (key) {
+                if (key !== 'paddingBytes' &&
+                    key !== 'paddingBytesBeforeCorrection' &&
+                    key !== 'paddingBytesAfterCorrection') {
+                    normalizedPadding[key] = existingPadding[key];
+                }
+            });
             if (correctionsApplied > 0) {
-                decodedData.padding.paddingBytesBeforeCorrection = beforeCorrection;
-                decodedData.padding.paddingBytesAfterCorrection = afterCorrection;
-                delete decodedData.padding.paddingBytes;
+                normalizedPadding.paddingBytes = afterCorrection;
+                normalizedPadding.paddingBytesBeforeCorrection = beforeCorrection;
             }
             else {
-                decodedData.padding.paddingBytes = afterCorrection;
-                delete decodedData.padding.paddingBytesBeforeCorrection;
-                delete decodedData.padding.paddingBytesAfterCorrection;
+                normalizedPadding.paddingBytes = afterCorrection;
             }
+            decodedData.padding = normalizedPadding;
             delete decodedData.padding.padByteStartIndex;
         }
         // Attach nitty-gritty details from format and structure
@@ -1316,9 +1323,8 @@ function calculatePaddingInfo(startBit, terminatorBits, totalBits, totalBytes) {
         endBit: endBit,
         numPaddingBits: padBits,
         numPaddingBytes: padBytes,
-        paddingBytesBeforeCorrection: [],
-        paddingBytesAfterCorrection: [],
         paddingBytes: [],
+        paddingBytesBeforeCorrection: [],
         padByteStartIndex: padByteStartIndex,
     };
 }
