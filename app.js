@@ -296,9 +296,9 @@
       li.appendChild(a);
 
       if (/%[0-9a-fA-F]{2}/.test(url)) {
-        const decodedUrl = safeDecodeUri(url);
         const decodedDisplay = document.createElement('div');
-        decodedDisplay.textContent = `Percent-decoded: ${decodedUrl}`;
+        decodedDisplay.append('Percent-decoded: ');
+        decodedDisplay.appendChild(buildHighlightedPercentDecoded(url));
         li.appendChild(decodedDisplay);
       }
 
@@ -441,6 +441,48 @@
       return decodeURIComponent(value);
     } catch {
       return value;
+    }
+  }
+
+  function buildHighlightedPercentDecoded(original) {
+    const container = document.createElement('span');
+    if (typeof original !== 'string' || !original) return container;
+
+    const percentRun = /(?:%[0-9a-fA-F]{2})+/g;
+    let lastIndex = 0;
+    let match;
+
+    while ((match = percentRun.exec(original)) !== null) {
+      if (match.index > lastIndex) {
+        container.appendChild(document.createTextNode(original.slice(lastIndex, match.index)));
+      }
+
+      const encoded = match[0];
+      const decoded = decodePercentRun(encoded);
+      if (decoded === null) {
+        container.appendChild(document.createTextNode(encoded));
+      } else {
+        const highlight = document.createElement('span');
+        highlight.className = 'percent-decoded-highlight';
+        highlight.textContent = decoded;
+        container.appendChild(highlight);
+      }
+
+      lastIndex = match.index + encoded.length;
+    }
+
+    if (lastIndex < original.length) {
+      container.appendChild(document.createTextNode(original.slice(lastIndex)));
+    }
+
+    return container;
+  }
+
+  function decodePercentRun(segment) {
+    try {
+      return decodeURIComponent(segment);
+    } catch {
+      return null;
     }
   }
 
@@ -797,6 +839,11 @@
     }
   }
 
+  function waitForCameraLayout() {
+    // Allow the camera elements to enter the layout before scrolling
+    return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  }
+
   function capturePhoto() {
     if (!mediaStream) {
       preview.textContent = 'Start the camera before capturing a photo.';
@@ -821,16 +868,18 @@
   }
 
   function setupCameraControls() {
-    startCameraButton.addEventListener('click', () => {
+    startCameraButton.addEventListener('click', async () => {
+      await startCamera();
+      await waitForCameraLayout();
       scrollCameraControlsIntoView();
-      startCamera();
     });
     capturePhotoButton.addEventListener('click', capturePhoto);
     stopCameraButton.addEventListener('click', stopCamera);
     if (startCameraScanButton) {
-      startCameraScanButton.addEventListener('click', () => {
+      startCameraScanButton.addEventListener('click', async () => {
+        await startCameraScan();
+        await waitForCameraLayout();
         scrollCameraControlsIntoView();
-        startCameraScan();
       });
     }
     if (listCamerasButton) {
