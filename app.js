@@ -587,29 +587,138 @@
     }
   }
 
+  const UUID_EPOCH_DIFF_100NS = 122192928000000000n; // Offset from Gregorian epoch to Unix epoch
+
+  function describeVariant(variantChar) {
+    const n = parseInt(variantChar, 16);
+    if (Number.isNaN(n)) return 'Unknown variant';
+    if (n <= 7) return 'Variant 0 (NCS/reserved)';
+    if (n <= 0xb) return 'Variant 1 (RFC 4122)';
+    if (n <= 0xd) return 'Variant 2 (Microsoft)';
+    return 'Variant 3 (future/reserved)';
+  }
+
+  function macFromNode(nodeHex) {
+    if (!nodeHex || !/^[0-9a-fA-F]{12}$/.test(nodeHex)) return null;
+    return nodeHex.match(/.{2}/g).join(':');
+  }
+
+  function buildTimestampFrom100ns(uuidTimestamp) {
+    if (typeof uuidTimestamp !== 'bigint') return null;
+    const unix100ns = uuidTimestamp - UUID_EPOCH_DIFF_100NS;
+    if (unix100ns < 0) return null;
+    const ms = Number(unix100ns / 10000n);
+    if (!Number.isFinite(ms)) return null;
+    try {
+      return { iso: new Date(ms).toISOString(), unixMillis: ms };
+    } catch {
+      return null;
+    }
+  }
+
+  function parseUuidDetails(uuid) {
+    const details = {
+      uuid,
+      version: null,
+      variant: 'Unknown variant',
+      timestamp: null,
+      macAddress: null,
+      clockSequence: null,
+      randomPart: null,
+      notes: [],
+    };
+
+    if (typeof uuid !== 'string') return details;
+    const cleaned = uuid.toLowerCase();
+    const parts = cleaned.split('-');
+    if (parts.length !== 5) return details;
+
+    const [timeLow, timeMid, timeHiVer, clockSeq, node] = parts;
+    const versionNibble = timeHiVer && timeHiVer[0];
+    details.version = /[0-9a-f]/.test(versionNibble) ? parseInt(versionNibble, 16) : null;
+    details.variant = describeVariant(clockSeq && clockSeq[0]);
+    details.macAddress = macFromNode(node);
+
+    const clockSeqHi = clockSeq ? parseInt(clockSeq.slice(0, 2), 16) : NaN;
+    const clockSeqLow = clockSeq ? parseInt(clockSeq.slice(2), 16) : NaN;
+    if (!Number.isNaN(clockSeqHi) && !Number.isNaN(clockSeqLow)) {
+      details.clockSequence = ((clockSeqHi & 0x3f) << 8) | clockSeqLow;
+    }
+
+    const nodeHex = node || '';
+
+    switch (details.version) {
+      case 1: {
+        try {
+          const ts100ns = ((BigInt(`0x${timeHiVer}`) & 0x0fffn) << 48n)
+            | (BigInt(`0x${timeMid}`) << 32n)
+            | BigInt(`0x${timeLow}`);
+          details.timestamp = buildTimestampFrom100ns(ts100ns);
+        } catch {
+          details.notes.push('Unable to interpret timestamp for v1 UUID');
+        }
+        break;
+      }
+      case 2: {
+        details.notes.push('Version 2 UUIDs store POSIX IDs instead of timestamps; timestamp is not recoverable.');
+        break;
+      }
+      case 3:
+      case 5: {
+        const hashBits = `${timeLow}${timeMid}${timeHiVer.slice(1)}${clockSeq}${nodeHex}`;
+        details.randomPart = hashBits;
+        details.notes.push('Name-based hash; no embedded timestamp.');
+        break;
+      }
+      case 4: {
+        const randomHex = `${timeLow}${timeMid}${timeHiVer.slice(1)}${((clockSeqHi & 0x3f) << 8 | clockSeqLow).toString(16).padStart(4, '0')}${nodeHex}`;
+        details.randomPart = randomHex;
+        details.notes.push('Fully random UUID; no embedded timestamp.');
+        break;
+      }
+      case 6: {
+        try {
+          const ts100ns = (BigInt(`0x${timeLow}`) << 28n)
+            | (BigInt(`0x${timeMid}`) << 12n)
+            | (BigInt(`0x${timeHiVer}`) & 0x0fffn);
+          details.timestamp = buildTimestampFrom100ns(ts100ns);
+        } catch {
+          details.notes.push('Unable to interpret timestamp for v6 UUID');
+        }
+        break;
+      }
+      case 7: {
+        try {
+          const tsMs = (BigInt(`0x${timeLow}`) << 16n) | BigInt(`0x${timeMid}`);
+          const msNumber = Number(tsMs);
+          if (Number.isFinite(msNumber)) {
+            details.timestamp = { iso: new Date(msNumber).toISOString(), unixMillis: msNumber };
+          }
+          const randPart = `${timeHiVer.slice(1)}${((clockSeqHi & 0x3f) << 8 | clockSeqLow).toString(16).padStart(4, '0')}${nodeHex}`;
+          details.randomPart = randPart;
+        } catch {
+          details.notes.push('Unable to interpret timestamp for v7 UUID');
+        }
+        break;
+      }
+      default: {
+        details.notes.push('Unrecognized or missing version nibble.');
+      }
+    }
+
+    return details;
+  }
+
   function findUuidMatches(text) {
     if (typeof text !== 'string' || !text) return [];
     const re = /\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b/g;
     const matches = [];
     let m;
 
-    const describeVariant = (variantChar) => {
-      const n = parseInt(variantChar, 16);
-      if (Number.isNaN(n)) return 'Unknown';
-      if (n <= 7) return 'Variant 0 (NCS/reserved)';
-      if (n <= 0xb) return 'Variant 1 (RFC 4122)';
-      if (n <= 0xd) return 'Variant 2 (Microsoft)';
-      return 'Variant 3 (future/reserved)';
-    };
-
     while ((m = re.exec(text)) !== null) {
       const uuid = m[0];
-      const versionNibble = uuid[14];
-      const version = /[0-9a-fA-F]/.test(versionNibble)
-        ? parseInt(versionNibble, 16)
-        : null;
-      const variant = describeVariant(uuid[19]);
-      matches.push({ uuid, version, variant });
+      const parsed = parseUuidDetails(uuid);
+      matches.push(parsed);
     }
     return matches;
   }
@@ -638,11 +747,12 @@
 
       const seen = new Set();
       const unique = [];
-      collected.forEach(({ uuid, source, version, variant }) => {
+      collected.forEach((entry) => {
+        const { uuid, source } = entry;
         const key = `${uuid}__${source}`;
         if (seen.has(key)) return;
         seen.add(key);
-        unique.push({ uuid, source, version, variant });
+        unique.push(entry);
       });
 
       if (!unique.length) {
@@ -655,11 +765,34 @@
       ngUuidListEl.appendChild(header);
 
       const list = document.createElement('ul');
-      unique.forEach(({ uuid, source, version, variant }) => {
+      unique.forEach(({ uuid, source, version, variant, timestamp, macAddress, clockSequence, randomPart, notes }) => {
         const li = document.createElement('li');
         const versionLabel = Number.isInteger(version) ? `Version ${version}` : 'Version unknown';
         const variantLabel = variant || 'Variant unknown';
-        li.textContent = `${uuid} — ${versionLabel}; ${variantLabel} (${source})`;
+
+        const summary = document.createElement('div');
+        summary.textContent = `${uuid} — ${versionLabel}; ${variantLabel} (${source})`;
+        li.appendChild(summary);
+
+        const detailList = document.createElement('ul');
+        const addDetail = (label, value) => {
+          const row = document.createElement('li');
+          row.textContent = `${label}: ${value}`;
+          detailList.appendChild(row);
+        };
+
+        addDetail('Timestamp', timestamp?.iso || 'Unavailable');
+        addDetail('Clock/sequence', Number.isInteger(clockSequence) ? clockSequence : 'Unavailable');
+        addDetail('MAC/Node', macAddress || 'Unavailable');
+        addDetail('Random/Hash bits', randomPart || 'Unavailable');
+
+        if (Array.isArray(notes) && notes.length) {
+          const notesRow = document.createElement('li');
+          notesRow.textContent = `Notes: ${notes.join(' ')}`;
+          detailList.appendChild(notesRow);
+        }
+
+        li.appendChild(detailList);
         list.appendChild(li);
       });
 
