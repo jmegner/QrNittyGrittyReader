@@ -770,16 +770,20 @@
         const versionLabel = Number.isInteger(version) ? `Version ${version}` : 'Version unknown';
         const variantLabel = variant || 'Variant unknown';
 
-        const summary = document.createElement('div');
-        summary.textContent = `${uuid} — ${versionLabel}; ${variantLabel} (${source})`;
-        li.appendChild(summary);
-
         const detailList = document.createElement('ul');
         const addDetail = (label, value) => {
           const row = document.createElement('li');
           row.textContent = `${label}: ${value}`;
           detailList.appendChild(row);
         };
+
+        const summary = document.createElement('div');
+        summary.textContent = `${uuid}`;
+        li.appendChild(summary);
+
+        addDetail('Version', versionLabel);
+        addDetail('Variant', variantLabel);
+        addDetail('Source', source);
 
         addDetail('Timestamp', timestamp?.iso || 'Unavailable');
         addDetail('Clock/sequence', Number.isInteger(clockSequence) ? clockSequence : 'Unavailable');
