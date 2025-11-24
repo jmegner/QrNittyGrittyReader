@@ -637,15 +637,13 @@
     const versionNibble = timeHiVer && timeHiVer[0];
     details.version = /[0-9a-f]/.test(versionNibble) ? parseInt(versionNibble, 16) : null;
     details.variant = describeVariant(clockSeq && clockSeq[0]);
-    details.macAddress = macFromNode(node);
-
+    const nodeHex = node || '';
+    const macAddr = macFromNode(nodeHex);
     const clockSeqHi = clockSeq ? parseInt(clockSeq.slice(0, 2), 16) : NaN;
     const clockSeqLow = clockSeq ? parseInt(clockSeq.slice(2), 16) : NaN;
-    if (!Number.isNaN(clockSeqHi) && !Number.isNaN(clockSeqLow)) {
-      details.clockSequence = ((clockSeqHi & 0x3f) << 8) | clockSeqLow;
-    }
-
-    const nodeHex = node || '';
+    const clockSeqValue = (!Number.isNaN(clockSeqHi) && !Number.isNaN(clockSeqLow))
+      ? ((clockSeqHi & 0x3f) << 8) | clockSeqLow
+      : null;
 
     switch (details.version) {
       case 1: {
@@ -657,10 +655,14 @@
         } catch {
           details.notes.push('Unable to interpret timestamp for v1 UUID');
         }
+        details.clockSequence = clockSeqValue;
+        details.macAddress = macAddr;
         break;
       }
       case 2: {
         details.notes.push('Version 2 UUIDs store POSIX IDs instead of timestamps; timestamp is not recoverable.');
+        details.clockSequence = clockSeqValue;
+        details.macAddress = macAddr;
         break;
       }
       case 3:
@@ -685,6 +687,8 @@
         } catch {
           details.notes.push('Unable to interpret timestamp for v6 UUID');
         }
+        details.clockSequence = clockSeqValue;
+        details.macAddress = macAddr;
         break;
       }
       case 7: {
@@ -702,7 +706,11 @@
         break;
       }
       default: {
-        details.notes.push('Unrecognized or missing version nibble.');
+        details.timestamp = null;
+        details.clockSequence = null;
+        details.macAddress = null;
+        details.randomPart = null;
+        details.notes.push('Unrecognized or missing version nibble; fields not interpreted.');
       }
     }
 
