@@ -12,6 +12,7 @@
   const cameraCanvas = document.getElementById('camera-canvas');
   const qrOutputNG = document.getElementById('qr-output-ng');
   const ngBase64ListEl = document.getElementById('ng-base64-list');
+  const ngUuidListEl = document.getElementById('ng-uuids');
   const qrOutputOriginal = document.getElementById('qr-output-original');
   const qrOutputZXing = document.getElementById('qr-output-zxing');
   const ngLinksEl = document.getElementById('ng-links');
@@ -135,20 +136,21 @@
     if (copyNgBtn) copyNgBtn.hidden = !ng;
     if (expandAllNgBtn) expandAllNgBtn.hidden = !ng;
     if (expand1NgBtn) expand1NgBtn.hidden = !ng;
-    updateNgBase64List(ng);
-    const ngLinkCount = updateLinksDisplay(ngLinksEl, ng && typeof ng.data === 'string' ? ng.data : '');
+    const decodedBase64Entries = updateNgBase64List(ng);
+    const { count: ngLinkCount, decodedBase64Urls } = updateLinksDisplay(ngLinksEl, ng && typeof ng.data === 'string' ? ng.data : '');
+    updateNgUuidList(ng, decodedBase64Entries, decodedBase64Urls);
     if (ngLinksEl) ngLinksEl.hidden = (ngLinkCount === 0) || !!qrOutputNG.hidden;
     renderInto(qrOutputOriginal, original, 'No QR code found in image.', 'Unable to render Original result.');
     if (copyOriginalBtn) copyOriginalBtn.hidden = !original;
     if (expandAllOriginalBtn) expandAllOriginalBtn.hidden = !original;
     if (expand1OriginalBtn) expand1OriginalBtn.hidden = !original;
-    const originalLinkCount = updateLinksDisplay(originalLinksEl, original && typeof original.data === 'string' ? original.data : '');
+    const { count: originalLinkCount } = updateLinksDisplay(originalLinksEl, original && typeof original.data === 'string' ? original.data : '');
     if (originalLinksEl) originalLinksEl.hidden = (originalLinkCount === 0) || !!qrOutputOriginal.hidden;
     renderInto(qrOutputZXing, zxing, 'No QR code found in image.', 'Unable to render ZXing result.');
     if (copyZxingBtn) copyZxingBtn.hidden = !zxing;
     if (expandAllZxingBtn) expandAllZxingBtn.hidden = !zxing;
     if (expand1ZxingBtn) expand1ZxingBtn.hidden = !zxing;
-    const zxingLinkCount = updateLinksDisplay(zxingLinksEl, zxing && typeof zxing.text === 'string' ? zxing.text : '');
+    const { count: zxingLinkCount } = updateLinksDisplay(zxingLinksEl, zxing && typeof zxing.text === 'string' ? zxing.text : '');
     if (zxingLinksEl) zxingLinksEl.hidden = (zxingLinkCount === 0) || !!qrOutputZXing.hidden;
 
     // Remember raw objects for copy-to-clipboard
@@ -275,12 +277,13 @@
   }
 
   function updateLinksDisplay(container, text) {
-    if (!container) return 0;
+    const decodedBase64Urls = [];
+    if (!container) return { count: 0, decodedBase64Urls };
     container.innerHTML = '';
     const links = extractLinks(text);
     if (!links.length) {
       container.hidden = true;
-      return 0;
+      return { count: 0, decodedBase64Urls };
     }
     const header = document.createElement('div');
     header.textContent = `Links found: ${links.length}`;
@@ -321,6 +324,9 @@
 
           b64Items.forEach(({ b64 }, idx) => {
             const decoded = base64ToUtf8(b64);
+            if (decoded !== null) {
+              decodedBase64Urls.push({ decoded, source: `Link ${url} base64url #${idx + 1}` });
+            }
             const item = document.createElement('li');
 
             const label = document.createElement('div');
@@ -348,7 +354,7 @@
       list.appendChild(li);
     });
     container.appendChild(list);
-    return links.length;
+    return { count: links.length, decodedBase64Urls };
   }
 
   function escapeHtml(s) {
@@ -500,17 +506,18 @@
   }
 
   function updateNgBase64List(ng) {
-    if (!ngBase64ListEl) return;
+    if (!ngBase64ListEl) return [];
+    const decodedEntries = [];
     try {
       ngBase64ListEl.innerHTML = '';
       if (!ng || typeof ng.data !== 'string') {
         ngBase64ListEl.hidden = true;
-        return;
+        return decodedEntries;
       }
       const items = findBase64Substrings(ng.data, 12);
       if (!items.length) {
         ngBase64ListEl.hidden = true;
-        return;
+        return decodedEntries;
       }
       ngBase64ListEl.hidden = false;
 
@@ -540,6 +547,9 @@
         wrap.appendChild(base64Line);
 
         const decoded = base64ToUtf8(b64);
+        if (decoded !== null) {
+          decodedEntries.push({ decoded, source: `Decoded base64 #${idx + 1} (offset ${index})` });
+        }
         const block = document.createElement('div');
         block.className = 'decoded-block';
         const header = document.createElement('div');
@@ -569,9 +579,285 @@
         wrap.appendChild(block);
         ngBase64ListEl.appendChild(wrap);
       });
+      return decodedEntries;
     } catch {
       ngBase64ListEl.hidden = true;
       ngBase64ListEl.textContent = '';
+      return decodedEntries;
+    }
+  }
+
+  const UUID_EPOCH_DIFF_100NS = 122192928000000000n; // Offset from Gregorian epoch to Unix epoch
+
+  function describeVariant(variantChar) {
+    const n = parseInt(variantChar, 16);
+    if (Number.isNaN(n)) return 'Unknown variant';
+    if (n <= 7) return 'Variant 0 (NCS/reserved)';
+    if (n <= 0xb) return 'Variant 1 (RFC 4122)';
+    if (n <= 0xd) return 'Variant 2 (Microsoft)';
+    return 'Variant 3 (future/reserved)';
+  }
+
+  function macFromNode(nodeHex) {
+    if (!nodeHex || !/^[0-9a-fA-F]{12}$/.test(nodeHex)) return null;
+    return nodeHex.match(/.{2}/g).join(':');
+  }
+
+  function buildTimestampFrom100ns(uuidTimestamp) {
+    if (typeof uuidTimestamp !== 'bigint') return null;
+    const unix100ns = uuidTimestamp - UUID_EPOCH_DIFF_100NS;
+    if (unix100ns < 0) return null;
+    const ms = Number(unix100ns / 10000n);
+    if (!Number.isFinite(ms)) return null;
+    try {
+      return { iso: new Date(ms).toISOString(), unixMillis: ms };
+    } catch {
+      return null;
+    }
+  }
+
+  function parseUuidDetails(uuid) {
+    const details = {
+      uuid,
+      version: null,
+      variant: 'Unknown variant',
+      timestamp: null,
+      macAddress: null,
+      clockSequence: null,
+      randomPart: null,
+      notes: [],
+    };
+
+    if (typeof uuid !== 'string') return details;
+    const cleaned = uuid.toLowerCase();
+    const parts = cleaned.split('-');
+    if (parts.length !== 5) return details;
+
+    const [timeLow, timeMid, timeHiVer, clockSeq, node] = parts;
+    const versionNibble = timeHiVer && timeHiVer[0];
+    details.version = /[0-9a-f]/.test(versionNibble) ? parseInt(versionNibble, 16) : null;
+    details.variant = describeVariant(clockSeq && clockSeq[0]);
+    const nodeHex = node || '';
+    const macAddr = macFromNode(nodeHex);
+    const clockSeqHi = clockSeq ? parseInt(clockSeq.slice(0, 2), 16) : NaN;
+    const clockSeqLow = clockSeq ? parseInt(clockSeq.slice(2), 16) : NaN;
+    const clockSeqValue = (!Number.isNaN(clockSeqHi) && !Number.isNaN(clockSeqLow))
+      ? ((clockSeqHi & 0x3f) << 8) | clockSeqLow
+      : null;
+
+    switch (details.version) {
+      case 1: {
+        try {
+          const ts100ns = ((BigInt(`0x${timeHiVer}`) & 0x0fffn) << 48n)
+            | (BigInt(`0x${timeMid}`) << 32n)
+            | BigInt(`0x${timeLow}`);
+          details.timestamp = buildTimestampFrom100ns(ts100ns);
+        } catch {
+          details.notes.push('Unable to interpret timestamp for v1 UUID');
+        }
+        details.clockSequence = clockSeqValue;
+        details.macAddress = macAddr;
+        break;
+      }
+      case 2: {
+        try {
+          const localId = BigInt(`0x${timeLow}`);
+          const ts28 = BigInt(`0x${timeMid}${timeHiVer}`) & 0x0fffffffn;
+          const ts100ns = ts28 << 32n;
+          details.timestamp = buildTimestampFrom100ns(ts100ns);
+          details.notes.push(`Local ID: 0x${localId.toString(16)}`);
+        } catch {
+          details.notes.push('Unable to interpret timestamp for v2 UUID');
+        }
+        details.clockSequence = Number.isNaN(clockSeqHi) ? null : (clockSeqHi & 0x3f);
+        if (clockSeq && clockSeq.length >= 4) {
+          details.notes.push(`Local domain byte: 0x${clockSeq.slice(2, 4)}`);
+        }
+        details.macAddress = macAddr;
+        break;
+      }
+      case 3:
+      case 5: {
+        const hashBits = `${timeLow}${timeMid}${timeHiVer.slice(1)}${clockSeq}${nodeHex}`;
+        details.randomPart = hashBits;
+        details.notes.push('Name-based hash; no embedded timestamp.');
+        break;
+      }
+      case 4: {
+        const randomHex = `${timeLow}${timeMid}${timeHiVer.slice(1)}${((clockSeqHi & 0x3f) << 8 | clockSeqLow).toString(16).padStart(4, '0')}${nodeHex}`;
+        details.randomPart = randomHex;
+        details.notes.push('Fully random UUID; no embedded timestamp.');
+        break;
+      }
+      case 6: {
+        try {
+          const ts100ns = (BigInt(`0x${timeLow}`) << 28n)
+            | (BigInt(`0x${timeMid}`) << 12n)
+            | (BigInt(`0x${timeHiVer}`) & 0x0fffn);
+          details.timestamp = buildTimestampFrom100ns(ts100ns);
+        } catch {
+          details.notes.push('Unable to interpret timestamp for v6 UUID');
+        }
+        details.clockSequence = clockSeqValue;
+        details.macAddress = macAddr;
+        break;
+      }
+      case 7: {
+        try {
+          const tsMs = (BigInt(`0x${timeLow}`) << 16n) | BigInt(`0x${timeMid}`);
+          const msNumber = Number(tsMs);
+          if (Number.isFinite(msNumber)) {
+            details.timestamp = { iso: new Date(msNumber).toISOString(), unixMillis: msNumber };
+          }
+          const randPart = `${timeHiVer.slice(1)}${((clockSeqHi & 0x3f) << 8 | clockSeqLow).toString(16).padStart(4, '0')}${nodeHex}`;
+          details.randomPart = randPart;
+        } catch {
+          details.notes.push('Unable to interpret timestamp for v7 UUID');
+        }
+        break;
+      }
+      default: {
+        details.timestamp = null;
+        details.clockSequence = null;
+        details.macAddress = null;
+        details.randomPart = null;
+        details.notes.push('Unrecognized or missing version nibble; fields not interpreted.');
+      }
+    }
+
+    return details;
+  }
+
+  function findUuidMatches(text) {
+    if (typeof text !== 'string' || !text) return [];
+    const re = /\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b/g;
+    const matches = [];
+    let m;
+
+    while ((m = re.exec(text)) !== null) {
+      const uuid = m[0];
+      const parsed = parseUuidDetails(uuid);
+      matches.push(parsed);
+    }
+    return matches;
+  }
+
+  function updateNgUuidList(ng, decodedBase64Entries = [], decodedBase64UrlEntries = []) {
+    if (!ngUuidListEl) return;
+    try {
+      ngUuidListEl.innerHTML = '';
+      if (!ng || typeof ng.data !== 'string') {
+        ngUuidListEl.hidden = true;
+        return;
+      }
+
+      const collected = [];
+      findUuidMatches(ng.data).forEach(match => collected.push({ ...match, source: 'Original data text' }));
+
+      decodedBase64Entries.forEach((entry, idx) => {
+        const source = (entry && entry.source) || `Decoded base64 #${idx + 1}`;
+        findUuidMatches(entry && entry.decoded).forEach(match => collected.push({ ...match, source }));
+      });
+
+      decodedBase64UrlEntries.forEach((entry, idx) => {
+        const source = (entry && entry.source) || `Decoded base64url #${idx + 1}`;
+        findUuidMatches(entry && entry.decoded).forEach(match => collected.push({ ...match, source }));
+      });
+
+      const seen = new Set();
+      const unique = [];
+      collected.forEach((entry) => {
+        const { uuid, source } = entry;
+        const key = `${uuid}__${source}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        unique.push(entry);
+      });
+
+      if (!unique.length) {
+        ngUuidListEl.hidden = true;
+        return;
+      }
+
+      const header = document.createElement('div');
+      header.textContent = `UUIDs found: ${unique.length}`;
+      ngUuidListEl.appendChild(header);
+
+      const list = document.createElement('ul');
+      unique.forEach(({ uuid, source, version, variant, timestamp, macAddress, clockSequence, randomPart, notes }) => {
+        const li = document.createElement('li');
+        const versionLabel = Number.isInteger(version) ? `Version ${version}` : 'Version unknown';
+        const variantLabel = variant || 'Variant unknown';
+
+        const detailList = document.createElement('ul');
+        const addDetail = (label, value) => {
+          const row = document.createElement('li');
+          row.textContent = `${label}: ${value}`;
+          detailList.appendChild(row);
+        };
+
+        const summary = document.createElement('div');
+        summary.textContent = `${uuid}`;
+        li.appendChild(summary);
+
+        addDetail('Version', versionLabel);
+        addDetail('Variant', variantLabel);
+        addDetail('Source', source);
+
+        const addIfExpected = (shouldShow, label, value) => {
+          if (!shouldShow) return;
+          addDetail(label, value);
+        };
+
+        switch (version) {
+          case 1:
+            addIfExpected(true, 'Timestamp', timestamp?.iso || 'Unavailable');
+            addIfExpected(true, 'Clock/sequence', Number.isInteger(clockSequence) ? clockSequence : 'Unavailable');
+            addIfExpected(true, 'MAC/Node', macAddress || 'Unavailable');
+            break;
+          case 2:
+            addIfExpected(true, 'Timestamp', timestamp?.iso || 'Unavailable');
+            addIfExpected(true, 'Clock/sequence', Number.isInteger(clockSequence) ? clockSequence : 'Unavailable');
+            addIfExpected(true, 'MAC/Node', macAddress || 'Unavailable');
+            break;
+          case 3:
+          case 5:
+            addIfExpected(true, 'Hash bits', randomPart || 'Unavailable');
+            break;
+          case 4:
+            addIfExpected(true, 'Random bits', randomPart || 'Unavailable');
+            break;
+          case 6:
+            addIfExpected(true, 'Timestamp', timestamp?.iso || 'Unavailable');
+            addIfExpected(true, 'Clock/sequence', Number.isInteger(clockSequence) ? clockSequence : 'Unavailable');
+            addIfExpected(true, 'MAC/Node', macAddress || 'Unavailable');
+            break;
+          case 7:
+            addIfExpected(true, 'Timestamp', timestamp?.iso || 'Unavailable');
+            addIfExpected(true, 'Random bits', randomPart || 'Unavailable');
+            break;
+          default:
+            addIfExpected(Boolean(timestamp), 'Timestamp', timestamp?.iso || 'Unavailable');
+            addIfExpected(Number.isInteger(clockSequence), 'Clock/sequence', clockSequence);
+            addIfExpected(Boolean(macAddress), 'MAC/Node', macAddress);
+            addIfExpected(Boolean(randomPart), 'Random/Hash bits', randomPart);
+        }
+
+        if (Array.isArray(notes) && notes.length) {
+          const notesRow = document.createElement('li');
+          notesRow.textContent = `Notes: ${notes.join(' ')}`;
+          detailList.appendChild(notesRow);
+        }
+
+        li.appendChild(detailList);
+        list.appendChild(li);
+      });
+
+      ngUuidListEl.appendChild(list);
+      ngUuidListEl.hidden = false;
+    } catch {
+      ngUuidListEl.hidden = true;
+      ngUuidListEl.textContent = '';
     }
   }
 
