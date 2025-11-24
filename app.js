@@ -660,8 +660,19 @@
         break;
       }
       case 2: {
-        details.notes.push('Version 2 UUIDs store POSIX IDs instead of timestamps; timestamp is not recoverable.');
-        details.clockSequence = clockSeqValue;
+        try {
+          const localId = BigInt(`0x${timeLow}`);
+          const ts28 = BigInt(`0x${timeMid}${timeHiVer}`) & 0x0fffffffn;
+          const ts100ns = ts28 << 32n;
+          details.timestamp = buildTimestampFrom100ns(ts100ns);
+          details.notes.push(`Local ID: 0x${localId.toString(16)}`);
+        } catch {
+          details.notes.push('Unable to interpret timestamp for v2 UUID');
+        }
+        details.clockSequence = Number.isNaN(clockSeqHi) ? null : (clockSeqHi & 0x3f);
+        if (clockSeq && clockSeq.length >= 4) {
+          details.notes.push(`Local domain byte: 0x${clockSeq.slice(2, 4)}`);
+        }
         details.macAddress = macAddr;
         break;
       }
