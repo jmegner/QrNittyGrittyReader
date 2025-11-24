@@ -816,6 +816,7 @@
             addIfExpected(true, 'MAC/Node', macAddress || 'Unavailable');
             break;
           case 2:
+            addIfExpected(true, 'Timestamp', timestamp?.iso || 'Unavailable');
             addIfExpected(true, 'Clock/sequence', Number.isInteger(clockSequence) ? clockSequence : 'Unavailable');
             addIfExpected(true, 'MAC/Node', macAddress || 'Unavailable');
             break;
