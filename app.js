@@ -785,10 +785,43 @@
         addDetail('Variant', variantLabel);
         addDetail('Source', source);
 
-        addDetail('Timestamp', timestamp?.iso || 'Unavailable');
-        addDetail('Clock/sequence', Number.isInteger(clockSequence) ? clockSequence : 'Unavailable');
-        addDetail('MAC/Node', macAddress || 'Unavailable');
-        addDetail('Random/Hash bits', randomPart || 'Unavailable');
+        const addIfExpected = (shouldShow, label, value) => {
+          if (!shouldShow) return;
+          addDetail(label, value);
+        };
+
+        switch (version) {
+          case 1:
+            addIfExpected(true, 'Timestamp', timestamp?.iso || 'Unavailable');
+            addIfExpected(true, 'Clock/sequence', Number.isInteger(clockSequence) ? clockSequence : 'Unavailable');
+            addIfExpected(true, 'MAC/Node', macAddress || 'Unavailable');
+            break;
+          case 2:
+            addIfExpected(true, 'Clock/sequence', Number.isInteger(clockSequence) ? clockSequence : 'Unavailable');
+            addIfExpected(true, 'MAC/Node', macAddress || 'Unavailable');
+            break;
+          case 3:
+          case 5:
+            addIfExpected(true, 'Hash bits', randomPart || 'Unavailable');
+            break;
+          case 4:
+            addIfExpected(true, 'Random bits', randomPart || 'Unavailable');
+            break;
+          case 6:
+            addIfExpected(true, 'Timestamp', timestamp?.iso || 'Unavailable');
+            addIfExpected(true, 'Clock/sequence', Number.isInteger(clockSequence) ? clockSequence : 'Unavailable');
+            addIfExpected(true, 'MAC/Node', macAddress || 'Unavailable');
+            break;
+          case 7:
+            addIfExpected(true, 'Timestamp', timestamp?.iso || 'Unavailable');
+            addIfExpected(true, 'Random bits', randomPart || 'Unavailable');
+            break;
+          default:
+            addIfExpected(Boolean(timestamp), 'Timestamp', timestamp?.iso || 'Unavailable');
+            addIfExpected(Number.isInteger(clockSequence), 'Clock/sequence', clockSequence);
+            addIfExpected(Boolean(macAddress), 'MAC/Node', macAddress);
+            addIfExpected(Boolean(randomPart), 'Random/Hash bits', randomPart);
+        }
 
         if (Array.isArray(notes) && notes.length) {
           const notesRow = document.createElement('li');
