@@ -16,6 +16,7 @@
   const qrOutputOriginal = document.getElementById('qr-output-original');
   const qrOutputZXing = document.getElementById('qr-output-zxing');
   const ngLinksEl = document.getElementById('ng-links');
+  const nittyGrittySection = document.getElementById('nitty-gritty-section');
   const originalLinksEl = document.getElementById('original-links');
   const zxingLinksEl = document.getElementById('zxing-links');
   const toggleNgButton = document.getElementById('toggle-ng');
@@ -84,6 +85,18 @@
     figure.appendChild(image);
 
     preview.appendChild(figure);
+  }
+
+  function scrollNittyGrittyIntoView() {
+    if (!nittyGrittySection) {
+      return;
+    }
+    try {
+      nittyGrittySection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch {
+      const rect = nittyGrittySection.getBoundingClientRect();
+      window.scrollTo(0, window.scrollY + rect.top);
+    }
   }
 
   function handleFile(file, originLabel) {
@@ -155,6 +168,10 @@
 
     // Remember raw objects for copy-to-clipboard
     lastResults = { ng, original, zxing };
+
+    if (ng || original || zxing) {
+      scrollNittyGrittyIntoView();
+    }
   }
 
   function prettyStringify(obj) {
