@@ -41,6 +41,17 @@
   let scanCanvas = null; // Offscreen canvas for scanning loop
   let cameraListDisplayToken = 0;
 
+  function registerServiceWorker() {
+    if (!('serviceWorker' in navigator) || !window.isSecureContext) {
+      return;
+    }
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('service-worker.js').catch(() => {});
+    });
+  }
+
+  registerServiceWorker();
+
   function setPreviewFromDataUrl(dataUrl, description, sourceLabel) {
     preview.innerHTML = '';
 
