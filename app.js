@@ -133,6 +133,7 @@
   }
 
   let lastResults = { ng: null, original: null, zxing: null };
+  let resultVersion = 0;
 
   function renderQrResults(ng, original, zxing) {
     const renderInto = (el, obj, emptyMsg, errorMsg) => {
@@ -181,6 +182,7 @@
     lastResults = { ng, original, zxing };
 
     if (ng || original || zxing) {
+      resultVersion += 1;
       scrollNittyGrittyIntoView();
     }
   }
@@ -1191,9 +1193,14 @@
     stopCameraButton.addEventListener('click', stopCamera);
     if (startCameraScanButton) {
       startCameraScanButton.addEventListener('click', async () => {
+        const startingResultVersion = resultVersion;
         await startCameraScan();
         await waitForCameraLayout();
-        scrollCameraControlsIntoView();
+        if (resultVersion !== startingResultVersion) {
+          scrollNittyGrittyIntoView();
+        } else {
+          scrollCameraControlsIntoView();
+        }
       });
     }
     if (listCamerasButton) {
