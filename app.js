@@ -134,6 +134,17 @@
 
   let lastResults = { ng: null, original: null, zxing: null };
   let resultVersion = 0;
+  let activeDecodeToken = 0;
+
+  function beginDecodeSession() {
+    activeDecodeToken += 1;
+    return activeDecodeToken;
+  }
+
+  function renderQrResultsForToken(token, ng, original, zxing) {
+    if (token !== activeDecodeToken) return;
+    renderQrResults(ng, original, zxing);
+  }
 
   function renderQrResults(ng, original, zxing) {
     const renderInto = (el, obj, emptyMsg, errorMsg) => {
@@ -931,6 +942,7 @@
   }
 
   function decodeFromDataUrl(dataUrl) {
+    const decodeToken = beginDecodeSession();
     const img = new Image();
     // To avoid taint issues when reading pixels from data URL, no crossOrigin needed
     img.onload = () => {
@@ -938,12 +950,12 @@
       canvas.width = img.naturalWidth || img.width;
       canvas.height = img.naturalHeight || img.height;
       const ctx = canvas.getContext('2d');
-      if (!ctx) { renderQrResults(null, null, null); return; }
+      if (!ctx) { renderQrResultsForToken(decodeToken, null, null, null); return; }
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       const { ng, original } = decodeFromCanvas(canvas);
 
       // Kick off ZXing asynchronously, render immediate jsQR results
-      renderQrResults(ng, original, null);
+      renderQrResultsForToken(decodeToken, ng, original, null);
       (async () => {
         let zxingResult = null;
         try {
@@ -959,10 +971,10 @@
         } catch (e) {
           zxingResult = null;
         }
-        renderQrResults(ng, original, zxingResult);
+        renderQrResultsForToken(decodeToken, ng, original, zxingResult);
       })();
     };
-    img.onerror = () => renderQrResults(null, null, null);
+    img.onerror = () => renderQrResultsForToken(decodeToken, null, null, null);
     img.src = dataUrl;
   }
 
@@ -1385,6 +1397,8 @@
               }
             } catch {}
 
+            const decodeToken = beginDecodeSession();
+
             // Update Preview with the successful frame and kick off ZXing
             let dataUrl = null;
             try {
@@ -1399,7 +1413,7 @@
             } catch {}
 
             // Render immediate ng + original
-            renderQrResults(ngResult, origResult, null);
+            renderQrResultsForToken(decodeToken, ngResult, origResult, null);
 
             // Start ZXing decode asynchronously using the snapshot
             (async () => {
@@ -1424,7 +1438,7 @@
                   }
                 }
               } catch {}
-              renderQrResults(ngResult, origResult, zxingResult);
+              renderQrResultsForToken(decodeToken, ngResult, origResult, zxingResult);
             })();
 
             // Stop scanning and camera on success
@@ -1453,6 +1467,8 @@
               }
             } catch {}
 
+            const decodeToken = beginDecodeSession();
+
             let dataUrl = null;
             try {
               cameraCanvas.width = width;
@@ -1465,7 +1481,7 @@
               }
             } catch {}
 
-            renderQrResults(ngResult, origResult, null);
+            renderQrResultsForToken(decodeToken, ngResult, origResult, null);
 
             (async () => {
               let zxingResult = null;
@@ -1488,7 +1504,7 @@
                   }
                 }
               } catch {}
-              renderQrResults(ngResult, origResult, zxingResult);
+              renderQrResultsForToken(decodeToken, ngResult, origResult, zxingResult);
             })();
 
             stopCamera();
