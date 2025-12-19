@@ -921,6 +921,30 @@ function decodeMatrix(matrix) {
         var ecLevelLetters = ["L", "M", "Q", "H"]; // Indexed to match Version.errorCorrectionLevels
         var ecLetter = ecLevelLetters[ecLevelIndex] || null;
         var baseDecoded = decodedData || {};
+        // Surface any non-standard padding bytes as a hidden message for debugging/inspection
+        if (baseDecoded.padding && Array.isArray(baseDecoded.padding.paddingBytes)) {
+            var secretBytes = baseDecoded.padding.paddingBytes.filter(function (b) { return b !== 236 && b !== 17; });
+            if (secretBytes.length > 0) {
+                var message = null;
+                if (typeof TextDecoder !== 'undefined') {
+                    try {
+                        message = new TextDecoder('utf-8', { fatal: false }).decode(new Uint8Array(secretBytes));
+                    }
+                    catch (_b) { }
+                }
+                if (message === null) {
+                    try {
+                        message = decodeURIComponent(secretBytes.map(function (b) { return "%" + ("0" + b.toString(16)).slice(-2); }).join(""));
+                    }
+                    catch (_b) {
+                        // Unable to decode padding message, leave it absent
+                    }
+                }
+                if (message !== null) {
+                    baseDecoded.messageInPadding = message;
+                }
+            }
+        }
         var finalResult = Object.assign({}, baseDecoded, {
             dimension: matrix.height,
             maskPattern: formatInfo.dataMask,
