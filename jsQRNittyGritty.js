@@ -339,8 +339,9 @@ function scan(matrix) {
         var decoded = decoder_1.decode(extracted.matrix);
         if (decoded) {
             return {
-				data: decoded.text,
-				version: decoded.version,
+                                data: decoded.text,
+                                ...(decoded.messageInPadding ? { messageInPadding: decoded.messageInPadding } : {}),
+                                version: decoded.version,
                 dimension: decoded.dimension != null ? decoded.dimension : location_1.dimension,
                 maskPattern: decoded.maskPattern,
                 binaryData: decoded.bytes,
@@ -921,6 +922,26 @@ function decodeMatrix(matrix) {
         var ecLevelLetters = ["L", "M", "Q", "H"]; // Indexed to match Version.errorCorrectionLevels
         var ecLetter = ecLevelLetters[ecLevelIndex] || null;
         var baseDecoded = decodedData || {};
+        // Surface any non-standard padding bytes as a hidden message for debugging/inspection
+        if (baseDecoded.padding && Array.isArray(baseDecoded.padding.paddingBytes)) {
+            var secretBytes = baseDecoded.padding.paddingBytes.filter(function (b) { return b !== 236 && b !== 17; });
+            if (secretBytes.length > 0) {
+                var message = null;
+                if (typeof TextDecoder !== 'undefined') {
+                    try {
+                        message = new TextDecoder('utf-8', { fatal: false }).decode(new Uint8Array(secretBytes));
+                    }
+                    catch (_b) {
+                        // Fall through to the basic byte-to-char fallback below.
+                    }
+                }
+                if (message === null) {
+                    // Basic fallback for environments without TextDecoder; assumes bytes map directly to characters.
+                    message = secretBytes.map(function (b) { return String.fromCharCode(b); }).join("");
+                }
+                baseDecoded.messageInPadding = message;
+            }
+        }
         var finalResult = Object.assign({}, baseDecoded, {
             dimension: matrix.height,
             maskPattern: formatInfo.dataMask,
