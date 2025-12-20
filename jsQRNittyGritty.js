@@ -339,8 +339,9 @@ function scan(matrix) {
         var decoded = decoder_1.decode(extracted.matrix);
         if (decoded) {
             return {
-				data: decoded.text,
-				version: decoded.version,
+                                data: decoded.text,
+                                ...(decoded.messageInPadding ? { messageInPadding: decoded.messageInPadding } : {}),
+                                version: decoded.version,
                 dimension: decoded.dimension != null ? decoded.dimension : location_1.dimension,
                 maskPattern: decoded.maskPattern,
                 binaryData: decoded.bytes,
