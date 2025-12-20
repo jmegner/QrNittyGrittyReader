@@ -930,19 +930,15 @@ function decodeMatrix(matrix) {
                     try {
                         message = new TextDecoder('utf-8', { fatal: false }).decode(new Uint8Array(secretBytes));
                     }
-                    catch (_b) { }
+                    catch (_b) {
+                        // Fall through to the basic byte-to-char fallback below.
+                    }
                 }
                 if (message === null) {
-                    try {
-                        message = decodeURIComponent(secretBytes.map(function (b) { return "%" + ("0" + b.toString(16)).slice(-2); }).join(""));
-                    }
-                    catch (_b) {
-                        // Unable to decode padding message, leave it absent
-                    }
+                    // Basic fallback for environments without TextDecoder; assumes bytes map directly to characters.
+                    message = secretBytes.map(function (b) { return String.fromCharCode(b); }).join("");
                 }
-                if (message !== null) {
-                    baseDecoded.messageInPadding = message;
-                }
+                baseDecoded.messageInPadding = message;
             }
         }
         var finalResult = Object.assign({}, baseDecoded, {
